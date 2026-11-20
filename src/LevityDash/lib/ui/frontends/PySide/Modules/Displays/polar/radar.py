@@ -49,12 +49,13 @@ def label(blip: Blip, altitudes: bool) -> str:
 def drawRadar(
 	painter: QPainter, look: Look, rect: QRectF, blips: Sequence[Blip], top: float, rings: int, compass: int,
 	colorFor: Callable[[float], QColor], labels: int, altitudes: bool = True, sweep: Optional[float] = None,
-	unit: str = 'nmi', legend: bool = True, glyphs: bool = True,
+	unit: str = 'nmi', legend: bool = True, glyphs: bool = True, glyphScale: float = 1.0,
 ) -> None:
 	"""The disc, rings, spokes and compass, then the blips nearest first, the nearest ``labels`` named.
 
 	``glyphs`` draws each blip as a silhouette of its kind (`glyphs.classify`) turned to its heading; off, a dot with
-	a tail. ``top`` is the distance of the rim. ``sweep`` is the sweep line's bearing in degrees, or None for no sweep: a
+	a tail. ``glyphScale`` multiplies the silhouette, so a dashboard can ask for larger traffic than the radius alone
+	gives. ``top`` is the distance of the rim. ``sweep`` is the sweep line's bearing in degrees, or None for no sweep: a
 	wedge of light that trails it and brightens the blips it has just passed."""
 	fontPx = max(8.0, min(rect.width(), rect.height()) / 28)
 	cx, cy, radius = plotCircle(rect, fontPx * 2.2)
@@ -99,7 +100,7 @@ def drawRadar(
 		color = colorFor(blip.altitude)
 		if glyphs:
 			glyph = glyphSet.classify(blip.kind, blip.category)
-			half = max(7.0, radius * 0.075) * glyph.size
+			half = max(7.0, radius * 0.075) * glyph.size * glyphScale
 			halo = QRadialGradient(QPointF(x, y), half * 2.2)
 			halo.setColorAt(0.0, _alpha(color, 0.38))
 			halo.setColorAt(1.0, _alpha(color, 0.0))

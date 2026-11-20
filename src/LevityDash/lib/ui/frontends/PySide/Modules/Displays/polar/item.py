@@ -41,6 +41,7 @@
   ceiling: 40000              # altitude that takes the last colour of the gradient (feet)
   sweep: true                 # a sweep line turning once every 8 seconds
   glyphs: true                # a silhouette of each aircraft's kind, turned to its heading; false for dots
+  glyph-scale: 1              # a multiplier on the silhouette's size, so the traffic reads from across a room
 ```
 
 A radar puts each thing at its bearing from you (north up) and its distance from the middle, out to `max`. It
@@ -157,6 +158,7 @@ class Polar(Panel, tag='polar'):
 		self._sweep = False
 		self._levels = True
 		self._glyphs = True
+		self._glyphScale = 1.0
 		self._sweepTimer = None
 		self._radarSources: list = []
 		self._radarValues: dict = {}
@@ -453,6 +455,18 @@ class Polar(Panel, tag='polar'):
 	def glyphs(self, value: bool):
 		self._glyphs = bool(value)
 
+	@StateProperty(key='glyph-scale', default=1.0, allowNone=False, after=refresh)
+	def glyphScale(self) -> float:
+		return self._glyphScale
+
+	@glyphScale.setter
+	def glyphScale(self, value: float):
+		self._glyphScale = value
+
+	@glyphScale.decode
+	def glyphScale(self, value) -> float:
+		return max(0.1, min(6.0, float(value)))
+
 	@StateProperty(key='altitudes', default=True, allowNone=False, after=refresh)
 	def altitudes(self) -> bool:
 		return self._levels
@@ -704,7 +718,7 @@ class Polar(Panel, tag='polar'):
 			sweep = (time.monotonic() % _SWEEP_SECONDS) / _SWEEP_SECONDS * 360
 		radar.drawRadar(
 			painter, look, rect, blips, top, self._rings, self._compass, colorFor, self._labels, self._levels,
-			sweep, legend=self._legend, glyphs=self._glyphs,
+			sweep, legend=self._legend, glyphs=self._glyphs, glyphScale=self._glyphScale,
 		)
 
 	def _pairs(self):
