@@ -113,7 +113,7 @@ TEMP_FONT = 'Allo Variable'
 
 
 def tempAxes(lo=500, hi=800, low='20°F', high='95°F', corner=True):
-	"""`corner` rounds the strokes as it warms; off where there are small decimals, which it fills in."""
+	"""`corner` rounds the strokes as it warms."""
 	axes = {'range': [low, high], 'wght': [lo, hi], 'ROND': [0, 100], 'opsz': 32}
 	if corner:
 		axes['corner'] = [0, 0.05]
@@ -209,7 +209,7 @@ def room(caption, sfx, color, x, y, w, h, i):
 			mini(temp, g(x, y + CAP + 0.8, w, body), color=color, hours=24, past=True, top='42%', bottom='0%', opacity=0.8, fill=0.3, weight=0.5,
 			     glow=GLOW),
 			num(temp, g(x, y + CAP + 0.8, w * 0.7, 11.5), '$text', weight='Bold', tracking=-0.02, unit='Inline', hint='00.0°', precision=1, small=True,
-			    group='global.room', align='TopLeft', font=TEMP_FONT, **tempAxes(corner=False)),
+			    group='global.room', align='TopLeft', font=TEMP_FONT, **tempAxes()),
 		]
 		quarter = w / len(rows)
 		for j, (name, k, c, kw) in enumerate(rows):
@@ -222,7 +222,7 @@ def room(caption, sfx, color, x, y, w, h, i):
 		mini(temp, g(x, y + CAP + 0.8, left - 0.8, hh), color=color, hours=24, past=True, top='45%', bottom='0%', opacity=0.8, fill=0.3, weight=0.5,
 		     glow=GLOW),
 		num(temp, g(x, y + CAP + 0.8, left - 0.8, hh * 0.62), '$text', weight='Bold', tracking=-0.02, unit='Inline', hint='00.0°', precision=1, small=True,
-		    group='global.room', align='TopLeft', font=TEMP_FONT, **tempAxes(corner=False)),
+		    group='global.room', align='TopLeft', font=TEMP_FONT, **tempAxes()),
 	]
 	# Four readings in two columns, the outer one flush to the board's edge so the panel reaches it.
 	rows = [('RH', key('humidity.humidity'), '$info', {'hint': '00%', 'unit': 'Inline'}),

@@ -936,6 +936,9 @@ items:
           - 0
           - 100
           opsz: 32
+          corner:
+          - 0
+          - 0.05
         alignment: TopLeft
         margins:
           left: 0
@@ -1249,6 +1252,9 @@ items:
           - 0
           - 100
           opsz: 32
+          corner:
+          - 0
+          - 0.05
         alignment: TopLeft
         margins:
           left: 0
