@@ -42,6 +42,7 @@ The standalone backend ignores this setting — it always ingests plugins live.
 dashboard = default.levity
 frontend = Qt
 fullscreen = False
+locked = False
 width = 90%
 height = 600px
 ```
@@ -57,6 +58,12 @@ The frontend that Levity will use. Currently, only Qt (PySide6) is supported —
 ### <div class=mono>fullscreen</div> 
 
 When ```True```, Levity will run in fullscreen mode.
+
+### <div class=mono>locked</div>
+
+When ```True```, the dashboard is display-only: no resize or margin handles are built, panels cannot be dragged, selected, dropped on or focused, and the edit context menu is off, while displays that read the mouse for themselves (a graph's tooltip) keep working. A locked dashboard has about a quarter of the scene items of an unlocked one, so hover and repaint work is much cheaper — worth it on an always-on room display.
+
+`--locked` / `--unlocked` on the command line and `LEVITY_LOCKED=1` in the environment override the config, in that order. `Ctrl+Alt+L` (Dashboard ▸ Locked) toggles it while running; the dashboard rebuilds, because the mode is applied as items are built.
 
 ### <div class=mono>display</div>
 

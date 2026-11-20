@@ -9,6 +9,7 @@ from LevityDash.lib.config import userConfig
 from LevityDash.lib.utils.shared import _Panel
 from LevityDash.lib.ui.Geometry import Position, Axis, LocationFlag
 from LevityDash.lib.ui.frontends.PySide.utils import colorPalette, DebugPaint
+from LevityDash.lib.ui.locked import isLocked
 from ... import qtLogger
 
 log = qtLogger.getChild('Handles')
@@ -272,6 +273,53 @@ class Handle(QGraphicsPathItem):
 		painter.drawPath(self._shape)
 
 
+class NoHandles:
+	"""Stands in for a `HandleGroup` on a locked dashboard: no scene items, and every call does nothing.
+
+	Code written for editing (`panel.resizeHandles.setEnabled(True)`, `marginHandles.signals.action.connect(...)`)
+	runs unchanged against it.
+	"""
+	__slots__ = ()
+
+	def __call__(self, *args, **kwargs):
+		return self
+
+	def __getattr__(self, name):
+		if name.startswith('__'):
+			raise AttributeError(name)
+		return self
+
+	def __setattr__(self, name, value):
+		pass
+
+	def __bool__(self):
+		return False
+
+	def __iter__(self):
+		return iter(())
+
+	def __len__(self):
+		return 0
+
+	def isEnabled(self, *args):
+		return False
+
+	def isVisible(self, *args):
+		return False
+
+	def isUnderMouse(self, *args):
+		return False
+
+	def hasFocus(self, *args):
+		return False
+
+	def childItems(self, *args):
+		return []
+
+
+NO_HANDLES = NoHandles()
+
+
 class HandleGroup(QGraphicsItemGroup):
 	__length: float
 	__offset: float
@@ -282,6 +330,11 @@ class HandleGroup(QGraphicsItemGroup):
 	handleClass: Type[Handle] = Handle
 	_resizeSignalConnected: bool = True
 	signals: HandleItemSignals
+
+	def __new__(cls, *args, **kwargs):
+		if isLocked():
+			return NO_HANDLES
+		return super().__new__(cls)
 
 	def __init__(self, parent: 'Panel',
 		length: float = 10.0,
