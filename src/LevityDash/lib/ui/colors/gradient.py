@@ -10,13 +10,14 @@ from yaml import SafeDumper, SafeLoader, SequenceNode, MappingNode, ScalarNode
 
 from LevityDash.lib.stateful import StatefulLoader
 from LevityDash.lib.ui import UILogger as log
-from LevityDash.lib.ui.colors import theme as _theme
+from LevityDash.lib.ui.colors import comfort as _comfort, theme as _theme
 from LevityDash.lib.ui.colors.color import Color
 from LevityDash.lib.ui.colors.oklch import oklab_stops
 from LevityDash.lib.ui.colors.stopunits import StopUnitError, formatStop, parseStop, toDataUnit
 from LevityDash.lib.utils import getOrSet, classproperty
 from LevityDash.shims.Qt import QImage
 from unitcorn import Measurement, Percentage
+from unitcorn.temperature import Temperature
 
 GradientValueType = TypeVar('GradientValueType', bound=Number)
 
@@ -528,10 +529,29 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 
 	@classmethod
 	def decode(cls, data: str | dict | list | tuple) -> 'Gradient':
+		gradient = cls._decode(data)
+		if isinstance(data, str) and data.strip() in ('$temperature', 'TemperatureGradient'):
+			# The temperature scale follows the user's comfort range (`[Comfort]` in config.ini).
+			return cls._withComfort(gradient)
+		return gradient
+
+	@classmethod
+	def _withComfort(cls, gradient: 'Gradient') -> 'Gradient':
+		low, high = _comfort.configured(log=log.warning)
+		if (low, high) == (_comfort.DEFAULT_LOW, _comfort.DEFAULT_HIGH):
+			return gradient
+		celsius = Temperature.Celsius
+		stops = gradient.resolve(celsius)
+		shifted = Gradient[celsius](colors={_comfort.shift(float(stop.value), low, high): stop.color for stop in stops.values()})
+		shifted.space = gradient.space
+		return shifted
+
+	@classmethod
+	def _decode(cls, data: str | dict | list | tuple) -> 'Gradient':
 		match data:
 			case str(token) if _theme.is_token(token):
 				# A scale of the active theme. The scale is a gradient spec of its own, so every form works in it.
-				return cls.decode(_theme.active().scale(_theme.token_name(token)))
+				return cls._decode(_theme.active().scale(_theme.token_name(token)))
 			case {'name': name, **rest}:
 				return cls._withOptions(rest, name=name)
 			case dict():
@@ -543,7 +563,7 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 				return cls(None, *colors)
 			case str(name) if name in _theme.active().names('scales') and _theme.active().scale(name) != name:
 				# A theme may recolour a named preset (`TemperatureGradient`) for every dashboard that already uses it.
-				return cls.decode(_theme.active().scale(name))
+				return cls._decode(_theme.active().scale(name))
 			case str(name):
 				if (preset := cls.__presets__.get(name, None)) is not None:
 					return preset
