@@ -21,6 +21,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Handles.MarginHandles import Mar
 from LevityDash.lib.ui.frontends.PySide.Modules.Menus import EditableLabelContextMenu, LabelContextMenu
 from LevityDash.lib.ui.frontends.PySide.utils import addRect, DebugPaint
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, parseSize, Position, Size, Margins
+from LevityDash.lib.ui.fill_gradient import decodeFillGradient, FillGradient
 from LevityDash.lib.ui.font_axes import decodeFontAxes, FontAxes
 from LevityDash.lib.ui.icons import getIcon, Icon
 from LevityDash.lib.utils import clearCacheAttr
@@ -489,6 +490,25 @@ class Label(Panel, ColorMixin, tag='label'):
 
 	@fontAxes.encode
 	def fontAxes(value: FontAxes | None):
+		return None if value is None else dict(value.spec)
+
+	@StateProperty(key='fill-gradient', default=None, allowNone=True, dependencies={'text'})
+	def fillGradient(self) -> FillGradient | None:
+		"""Fill the letters with a scale's colours around a followed value: `fill-gradient: {scale: $temperature, of: <key>,
+		spread: 8°F, angle: 180}` runs from the scale at value+spread (top) to value-spread (foot), so a reading is
+		its own colour in the middle and a little warmer above and cooler below (see `lib/ui/fill_gradient.py`)."""
+		return self.textBox._fillGradient
+
+	@fillGradient.setter
+	def fillGradient(self, value: FillGradient | None):
+		self.textBox.setFillGradient(value)
+
+	@fillGradient.decode
+	def fillGradient(self, value) -> FillGradient | None:
+		return decodeFillGradient(value)
+
+	@fillGradient.encode
+	def fillGradient(value: FillGradient | None):
 		return None if value is None else dict(value.spec)
 
 	@StateProperty(key='tracking', default=0.0, dependencies={'geometry', 'text'})
