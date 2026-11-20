@@ -44,6 +44,11 @@
   glyph-scale: 1              # a multiplier on the silhouette's size, so the traffic reads from across a room
 ```
 
+Click a blip to open its details (type, category, altitude, speed, heading, distance, bearing), and click it again
+to close them. Click the radar's empty sky to open the whole radar larger, over the dashboard: the same disc and
+blips, filling the screen, with the details panel available there too. Click outside the disc, or the empty sky
+inside it, to close that. The radar keeps no state of its own: the next slot ranking moves the panel with the plane.
+
 A radar puts each thing at its bearing from you (north up) and its distance from the middle, out to `max`. It
 reads current values, not series: for each slot `N` of `prefix` the keys `prefix.N.bearing`, `.distance`, `.altitude`,
 `.heading`, `.speed`, `.callsign`, `.type` and `.category`, with `prefix.count` saying how many slots are filled (the `Aircraft`
@@ -70,7 +75,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Optional
 
-from PySide6.QtCore import QEasingCurve, QRectF, QTimer, QVariantAnimation
+from PySide6.QtCore import QEasingCurve, QRectF, Qt, QTimer, QVariantAnimation
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QGraphicsItem
 
@@ -159,6 +164,8 @@ class Polar(Panel, tag='polar'):
 		self._levels = True
 		self._glyphs = True
 		self._glyphScale = 1.0
+		self._selected: Optional[int] = None
+		self._overlay = None
 		self._sweepTimer = None
 		self._radarSources: list = []
 		self._radarValues: dict = {}
@@ -230,6 +237,8 @@ class Polar(Panel, tag='polar'):
 				return
 			self._radarValues[(field, slot)] = number
 		self.update()
+		if self._overlay is not None:
+			self._overlay.update()
 
 	def _dropRadar(self):
 		sources, self._radarSources = self._radarSources, []
@@ -705,13 +714,30 @@ class Polar(Panel, tag='polar'):
 			blips.append(radar.Blip(
 				name or '?', bearing, distance, values.get(('altitude', n), 0.0),
 				values.get(('heading', n), 0.0), values.get(('speed', n), 0.0),
-				values.get(('type', n), ''), values.get(('category', n), ''),
+				values.get(('type', n), ''), values.get(('category', n), ''), slot=n,
 			))
 		return blips
 
-	def _paintRadar(self, painter, look, rect):
-		blips = self._blips()
-		top = self._max if self._max is not None else 50.0
+	def _popoverRows(self, blip: radar.Blip) -> list[tuple[str, str]]:
+		"""The lines under a blip's name: only what the slot published, in its own units."""
+		rows = []
+		if blip.kind:
+			rows.append(('Type', blip.kind))
+		category = self._radarValues.get(('category', blip.slot))
+		if category:
+			rows.append(('Category', str(category)))
+		rows.append(('Altitude', f'{blip.altitude:,.0f} ft'))
+		rows.append(('Speed', f'{blip.speed:,.0f} kt'))
+		rows.append(('Heading', f'{blip.heading:,.0f}°'))
+		rows.append(('Distance', f'{blip.distance:.1f} nmi'))
+		rows.append(('Bearing', f'{blip.bearing:,.0f}°'))
+		return rows
+
+	def drawRadarInto(self, painter: QPainter, rect: QRectF) -> None:
+		"""Paint the radar into ``rect``: what the panel draws, and what the enlarged popover draws, so they agree."""
+		look = self._look()
+		blips = self.radarBlips()
+		top = self.radarTop()
 		colorFor = self._colorFor(look, Series(), 0.0, self._ceiling)
 		sweep = None
 		if self._sweep:
@@ -720,6 +746,58 @@ class Polar(Panel, tag='polar'):
 			painter, look, rect, blips, top, self._rings, self._compass, colorFor, self._labels, self._levels,
 			sweep, legend=self._legend, glyphs=self._glyphs, glyphScale=self._glyphScale,
 		)
+		selected = next((blip for blip in blips if blip.slot == self._selected), None)
+		if selected is None:
+			self._selected = None
+		else:
+			radar.drawPopover(painter, look, rect, selected, self._popoverRows(selected), top)
+
+	def radarBlips(self) -> list:
+		"""The blips a click can land on, in the order the panel draws them."""
+		return self._blips()
+
+	def radarTop(self) -> float:
+		"""The distance of the rim, in the slots' own unit."""
+		return self._max if self._max is not None else 50.0
+
+	def selectRadarSlot(self, slot: Optional[int]) -> None:
+		"""Open a slot's details, or close them with None; the enlarged popover follows the panel."""
+		self._selected = slot
+		self.update()
+		if self._overlay is not None:
+			self._overlay.update()
+
+	def openRadarPopover(self) -> None:
+		"""Open the radar larger, over the dashboard. One at a time; a second click closes the first."""
+		from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.popover import RadarPopover
+		if self._overlay is not None:
+			self._overlay.close()
+		scene = self.scene()
+		if scene is None:
+			return
+		self._overlay = RadarPopover(self)
+		scene.addItem(self._overlay)
+
+	def _clickRadar(self, pos) -> None:
+		"""Click a blip for its details; click the empty sky to open the radar larger."""
+		hit = radar.hitBlip(QRectF(self.rect()), self.radarBlips(), self.radarTop(), pos)
+		if hit is None:
+			self.openRadarPopover()
+		else:
+			self.selectRadarSlot(None if hit.slot == self._selected else hit.slot)
+
+	def mousePressEvent(self, mouseEvent):
+		if self._plot == 'radar' and mouseEvent.button() == Qt.MouseButton.LeftButton:
+			self._clickRadar(mouseEvent.pos())
+		super().mousePressEvent(mouseEvent)
+
+	def itemChange(self, change, value):
+		if change == QGraphicsItem.GraphicsItemChange.ItemSceneChange and value is None and self._overlay is not None:
+			self._overlay.close()
+		return super().itemChange(change, value)
+
+	def _paintRadar(self, painter, look, rect):
+		self.drawRadarInto(painter, rect)
 
 	def _pairs(self):
 		"""Direction and speed samples that share a timestamp, inside the window."""

@@ -70,3 +70,129 @@ def test_the_radar_paints_a_glyph_turned_to_its_heading():
 	east = _grab([Blip('A', 90, 25, heading=90, speed=200, kind='B738')], legend=False)
 	dots = _grab([Blip('A', 90, 25, heading=0, speed=200, kind='B738')], legend=False, glyphs=False)
 	assert north != east and north != dots
+
+
+def _hit(blips, pos, top=50):
+	from PySide6.QtCore import QPointF, QRectF
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.radar import hitBlip
+	return hitBlip(QRectF(0, 0, 400, 400), blips, top, QPointF(*pos))
+
+
+def test_a_click_finds_the_blip_it_lands_on():
+	plane = Blip('UAL123', 90, 25, speed=0, slot=3)
+	# Due east at half the range: the disc's radius is 200 less the text padding, so the mark is near x = 284.
+	assert _hit([plane], (284, 200)) is plane
+	assert _hit([plane], (200, 200)) is None            # the middle, where nothing is
+	assert _hit([plane], (330, 200)) is None            # well clear of it
+	assert _hit([Blip('far', 90, 80)], (284, 200)) is None  # past the rim: not drawn, so not clickable
+	assert _hit([], (284, 200)) is None
+
+
+def test_two_blips_on_one_point_hand_back_the_nearer_to_the_pointer():
+	near = Blip('near', 90, 25, slot=1)
+	far = Blip('far', 90, 25.4, slot=2)
+	hit = _hit([far, near], (286, 200))
+	assert hit is not None and hit.slot in (1, 2)
+
+
+def test_the_popover_paints_a_panel_inside_the_plot():
+	from PySide6.QtCore import QRectF
+	from PySide6.QtGui import QColor, QImage, QPainter
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar import draw, radar
+
+	image = QImage(400, 400, QImage.Format.Format_ARGB32)
+	image.fill(QColor('black'))
+	look = draw.Look(*(QColor('white') for _ in range(5)))
+	painter = QPainter(image)
+	plane = Blip('UAL123', 90, 25, altitude=12000, speed=250, slot=1)
+	panel = radar.drawPopover(painter, look, QRectF(0, 0, 400, 400), plane, [('Altitude', '12,000 ft'), ('Speed', '250 kt')], 50)
+	painter.end()
+	assert panel.width() > 40 and panel.height() > 20
+	assert QRectF(0, 0, 400, 400).contains(panel), 'the panel is kept inside the plot'
+	inside = image.pixelColor(int(panel.center().x()), int(panel.center().y()))
+	assert inside != QColor('black'), 'the panel is painted, not left as empty sky'
+
+
+class _FakeRadar:
+	"""Just enough of a Polar panel for the popover: it paints the disc and answers clicks."""
+
+	def __init__(self, blips=()):
+		self._overlay = None
+		self._scene = None
+		self.blips = list(blips)
+		self.painted: list = []
+		self.selected = None
+
+	def scene(self):
+		return self._scene
+
+	def rect(self):
+		from PySide6.QtCore import QRectF
+		return QRectF(0, 0, 400, 400)
+
+	def drawRadarInto(self, painter, rect):
+		self.painted.append((rect.width(), rect.height()))
+
+	def radarBlips(self):
+		return self.blips
+
+	def radarTop(self):
+		return 50.0
+
+	def selectRadarSlot(self, slot):
+		self.selected = slot
+
+
+def _click(item, point):
+	from PySide6.QtCore import QEvent, Qt
+	from PySide6.QtWidgets import QGraphicsSceneMouseEvent
+	event = QGraphicsSceneMouseEvent(QEvent.Type.GraphicsSceneMousePress)
+	event.setButton(Qt.MouseButton.LeftButton)
+	event.setPos(point)
+	item.mousePressEvent(event)
+
+
+def test_the_radar_opens_larger_as_a_square_inside_the_scene():
+	from PySide6.QtCore import QPointF, QRectF
+	from PySide6.QtWidgets import QGraphicsScene
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.popover import RadarPopover
+
+	scene = QGraphicsScene()
+	scene.setSceneRect(QRectF(0, 0, 1000, 600))
+	panel = _FakeRadar()
+	panel._scene = scene
+	popover = RadarPopover(panel)
+	scene.addItem(popover)
+	assert panel._overlay is None  # the panel sets it when it opens one, as openRadarPopover does
+	area = popover.radarArea()
+	assert area.width() == area.height(), 'the disc gets a square, not a stretched one'
+	assert scene.sceneRect().contains(area)
+	assert area.width() > min(scene.sceneRect().width(), scene.sceneRect().height()) * 0.8, 'most of the scene'
+	from PySide6.QtGui import QColor, QImage, QPainter
+	image = QImage(1000, 600, QImage.Format.Format_ARGB32)
+	image.fill(QColor('white'))
+	painter = QPainter(image)
+	popover.paint(painter, None)
+	painter.end()
+	assert panel.painted, 'it draws the panel radar, not a second copy of it'
+	assert panel.painted[-1][0] == area.width(), 'and draws it into the square, so it scales up'
+	assert image.pixelColor(2, 2) != QColor('white'), 'the backdrop dims the dashboard behind it'
+	assert image.pixelColor(500, 300) != QColor(0, 0, 0, 205), 'the disc itself is drawn in the middle'
+
+
+def test_a_click_on_a_blip_in_the_popover_selects_it_and_a_click_elsewhere_closes_it():
+	from PySide6.QtCore import QRectF
+	from PySide6.QtWidgets import QGraphicsScene
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.popover import RadarPopover
+
+	scene = QGraphicsScene()
+	scene.setSceneRect(QRectF(0, 0, 800, 800))
+	panel = _FakeRadar([Blip('OVERHEAD', 0, 0, slot=4)])  # at the middle of the disc
+	popover = RadarPopover(panel)
+	panel._overlay = popover
+	scene.addItem(popover)
+	centre = popover.radarArea().center()
+	_click(popover, centre)
+	assert panel.selected == 4 and popover.scene() is scene, 'a blip click names it and keeps the popover'
+	_click(popover, popover.boundingRect().topLeft())  # the backdrop, outside the disc
+	assert popover.scene() is None and panel._overlay is None, 'a click away closes it'

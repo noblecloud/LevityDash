@@ -31,6 +31,71 @@ class Blip:
 	speed: float = 0.0
 	kind: str = ''  # ICAO type designator (B738), for the silhouette
 	category: str = ''  # ADS-B emitter category (A3), for the silhouette when the type is unknown
+	slot: int = 0  # which slot it came from, so a click can read the rest of that slot
+
+
+def hitBlip(rect: QRectF, blips: Sequence[Blip], top: float, pos: QPointF, slack: float = 12.0) -> Optional[Blip]:
+	"""The blip under ``pos`` in the same coordinates ``drawRadar`` paints, or None.
+
+	The reach is a silhouette's own half-size plus ``slack``, so a small mark is still comfortable to hit; a blip
+	beyond the rim is not drawn and not returned. Where two share the point, the one nearest the pointer wins.
+	"""
+	if not blips or top <= 0:
+		return None
+	fontPx = max(8.0, min(rect.width(), rect.height()) / 28)
+	cx, cy, radius = plotCircle(rect, fontPx * 2.2)
+	if radius < 12:
+		return None
+	reach = max(7.0, radius * 0.075) * 2 + slack
+	found, nearest = None, float('inf')
+	for blip in blips:
+		if blip.distance > top:
+			continue
+		x, y = polarPoint(cx, cy, radius * min(blip.distance / top, 1.0), blip.bearing)
+		gap = math.hypot(pos.x() - x, pos.y() - y)
+		if gap <= reach and gap < nearest:
+			found, nearest = blip, gap
+	return found
+
+
+def drawPopover(
+	painter: QPainter, look: Look, rect: QRectF, blip: Blip, rows: Sequence[tuple[str, str]], top: float,
+) -> QRectF:
+	"""A panel beside ``blip``: its name in bold, then ``rows`` of ``(label, value)``, kept inside ``rect``.
+
+	It is drawn where there is room, so a plane near the rim gets its details pushed back toward the middle.
+	"""
+	fontPx = max(9.0, min(rect.width(), rect.height()) / 34)
+	titleFont = _font(look.display, fontPx * 1.15, bold=True)
+	rowFont = _font(look.mono, fontPx * 0.9)
+	title = blip.name or 'Aircraft'
+	titleMetrics = QFontMetricsF(titleFont)
+	rowMetrics = QFontMetricsF(rowFont)
+	pad = fontPx * 0.8
+	lineHeight = rowMetrics.height() * 1.25
+	width = max([titleMetrics.horizontalAdvance(title)] + [
+		rowMetrics.horizontalAdvance(f'{label}: {value}') for label, value in rows
+	]) + pad * 2
+	height = titleMetrics.height() + lineHeight * len(rows) + pad * 1.6
+
+	cx, cy, radius = plotCircle(rect, fontPx * 2.2)
+	x, y = polarPoint(cx, cy, radius * min(blip.distance / top, 1.0) if top > 0 else 0.0, blip.bearing)
+	left = x + fontPx * 1.6
+	if left + width > rect.right() - 2:
+		left = x - fontPx * 1.6 - width
+	left = max(rect.left() + 2, min(left, rect.right() - width - 2))
+	panelTop = max(rect.top() + 2, min(y - height / 2, rect.bottom() - height - 2))
+	panel = QRectF(left, panelTop, width, height)
+
+	painter.setPen(QPen(_alpha(look.accent, 0.75), 1.0))
+	painter.setBrush(QColor(look.rule.red(), look.rule.green(), look.rule.blue(), 240))
+	painter.drawRoundedRect(panel, fontPx * 0.6, fontPx * 0.6)
+	_text(painter, title, left + pad, panelTop + pad * 0.8 + titleMetrics.height() / 2, look.text, titleFont, 'left')
+	rowY = panelTop + pad * 0.8 + titleMetrics.height() + lineHeight * 0.5
+	for labelText, value in rows:
+		_text(painter, f'{labelText}: {value}', left + pad, rowY, look.muted, rowFont, 'left')
+		rowY += lineHeight
+	return panel
 
 
 def ringValues(top: float, rings: int) -> list[float]:
