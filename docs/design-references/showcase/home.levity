@@ -964,11 +964,11 @@ items:
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
-    alignment: BottomRight
+    alignment: BottomLeft
     geometry:
-      x: 88.6%
-      y: 28.5%
-      width: 9.4%
+      x: 89.0%
+      y: 37.762%
+      width: 4.2%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -983,7 +983,7 @@ items:
       unitPosition: Inline
       precision: 0
       valueLabel:
-        color: $info
+        color: '#2ee6ff'
         font: $mono
         weight: SemiBold
         matchingGroup:
@@ -991,16 +991,16 @@ items:
           matchAll: true
         alignment: BottomRight
         margins:
-          left: 10%
+          left: 0
           right: 0
           top: 0
           bottom: 0
       format-hint: 00%
     geometry:
-      x: 88.6%
-      y: 30.4%
-      width: 9.4%
-      height: 5.8%
+      x: 91.2%
+      y: 34.662%
+      width: 6.8%
+      height: 4.6%
     margins:
       left: 0
       right: 0
@@ -1011,11 +1011,11 @@ items:
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
-    alignment: BottomRight
+    alignment: BottomLeft
     geometry:
-      x: 88.6%
-      y: 37.2%
-      width: 9.4%
+      x: 89.0%
+      y: 43.8%
+      width: 4.2%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1030,7 +1030,7 @@ items:
       unitPosition: Inline
       precision: 0
       valueLabel:
-        color: $good
+        color: '#7dff4f'
         font: $mono
         weight: SemiBold
         matchingGroup:
@@ -1038,16 +1038,16 @@ items:
           matchAll: true
         alignment: BottomRight
         margins:
-          left: 10%
+          left: 0
           right: 0
           top: 0
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 88.6%
-      y: 39.1%
-      width: 9.4%
-      height: 5.8%
+      x: 91.2%
+      y: 40.7%
+      width: 6.8%
+      height: 4.6%
     margins:
       left: 0
       right: 0
@@ -1186,11 +1186,11 @@ items:
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
-    alignment: BottomRight
+    alignment: BottomLeft
     geometry:
-      x: 88.6%
-      y: 48.1%
-      width: 9.4%
+      x: 89.0%
+      y: 57.362%
+      width: 4.2%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1205,7 +1205,7 @@ items:
       unitPosition: Inline
       precision: 0
       valueLabel:
-        color: $info
+        color: '#2ee6ff'
         font: $mono
         weight: SemiBold
         matchingGroup:
@@ -1213,16 +1213,16 @@ items:
           matchAll: true
         alignment: BottomRight
         margins:
-          left: 10%
+          left: 0
           right: 0
           top: 0
           bottom: 0
       format-hint: 00%
     geometry:
-      x: 88.6%
-      y: 50.0%
-      width: 9.4%
-      height: 5.8%
+      x: 91.2%
+      y: 54.262%
+      width: 6.8%
+      height: 4.6%
     margins:
       left: 0
       right: 0
@@ -1233,11 +1233,11 @@ items:
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
-    alignment: BottomRight
+    alignment: BottomLeft
     geometry:
-      x: 88.6%
-      y: 56.8%
-      width: 9.4%
+      x: 89.0%
+      y: 63.4%
+      width: 4.2%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1252,7 +1252,7 @@ items:
       unitPosition: Inline
       precision: 0
       valueLabel:
-        color: $good
+        color: '#7dff4f'
         font: $mono
         weight: SemiBold
         matchingGroup:
@@ -1260,16 +1260,16 @@ items:
           matchAll: true
         alignment: BottomRight
         margins:
-          left: 10%
+          left: 0
           right: 0
           top: 0
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 88.6%
-      y: 58.7%
-      width: 9.4%
-      height: 5.8%
+      x: 91.2%
+      y: 60.3%
+      width: 6.8%
+      height: 4.6%
     margins:
       left: 0
       right: 0
