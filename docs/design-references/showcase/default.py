@@ -107,6 +107,15 @@ def data(rooms=INDOOR, name='default'):
 	return d
 
 
+# Temperatures in Allo, whose weight and roundness follow the reading: hot comes out heavy and round, cold lean and
+# sharp. Never under 500 at the cold end (no hairlines on the display). Allo has tabular figures, so columns still line up.
+TEMP_FONT = 'Allo Variable'
+
+
+def tempAxes(lo=500, hi=800, low='20°F', high='95°F'):
+	return {'font-axes': {'range': [low, high], 'wght': [lo, hi], 'ROND': [0, 100], 'opsz': 32}}
+
+
 def cap_(s, geom, color='$faint', **kw):
 	"""A label: condensed, tracked capitals."""
 	kw.setdefault('tracking', 0.16)
@@ -244,13 +253,14 @@ def board(rooms=INDOOR):
 	x = 39.5
 	B += [
 		cap_('OUTSIDE', g(x, 2.8, 12, CAP), '$accent'),
-		num(T, g(x, 4.6, 15.4, 15.6), {'scale': '$temperature', 'of': T}, unit='Inline', hint='00°', weight='Black', tracking=-0.04, font='$body'),
+		num(T, g(x, 4.6, 15.4, 15.6), {'scale': '$temperature', 'of': T}, unit='Inline', hint='00°', weight='Black', tracking=-0.04, font=TEMP_FONT,
+		    **tempAxes(600, 900)),
 		cap_('HIGH', g(x + 16.6, 2.8, 7, CAP)),
 		num('environment.temperature.high', g(x + 16.6, 4.6, 8, 5.8), '$bad', hint='00', weight='Bold', group='global.room',
-		    fmt={'unit_symbol': False}),
+		    fmt={'unit_symbol': False}, font=TEMP_FONT, **tempAxes()),
 		cap_('LOW', g(x + 16.6, 12.0, 7, CAP)),
 		num('environment.temperature.low', g(x + 16.6, 13.8, 8, 5.8), '$info', hint='00', weight='Bold', group='global.room',
-		    fmt={'unit_symbol': False}),
+		    fmt={'unit_symbol': False}, font=TEMP_FONT, **tempAxes()),
 		# The day's low to high on a 30 to 100 °F track, the temperature now as a line across it.
 		bar(T, g(x, 20.9, 24.6, 2.2), 30, 100, track={'weight': '42%', 'color': '$rule'},
 		    fill={'from': 'environment.temperature.low', 'to': 'environment.temperature.high', 'gradient': '$temperature', 'weight': '42%',
