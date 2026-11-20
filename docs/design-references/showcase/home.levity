@@ -1008,8 +1008,104 @@ items:
     geometry:
       x: 89.2%
       y: 32.6%
-      width: 8.8%
+      width: 5.984%
       height: 4.2%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
+  - type: text
+    text: H
+    font: $display
+    weight: Medium
+    color: $faint
+    alignment: BottomLeft
+    geometry:
+      x: 95.36%
+      y: 33.15%
+      width: 0.8%
+      height: 1.25%
+    matchingGroup:
+      group: global.hlmark
+      matchAll: true
+    tracking: 0
+    format-hint: H
+  - type: realtime.text
+    key: max(indoor.humidity.humidity#bedroom, 24h)
+    title: false
+    alignment: BottomLeft
+    display:
+      unitPosition: Inline
+      precision: 0
+      valueLabel:
+        color: $muted
+        font: Allo Variable
+        weight: Medium
+        matchingGroup:
+          group: global.hl
+          matchAll: true
+        number-align: end
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
+      format-hint: 00%
+    geometry:
+      x: 96.16%
+      y: 32.6%
+      width: 1.84%
+      height: 2.0%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
+  - type: text
+    text: L
+    font: $display
+    weight: Medium
+    color: $faint
+    alignment: BottomLeft
+    geometry:
+      x: 95.36%
+      y: 35.02%
+      width: 0.8%
+      height: 1.25%
+    matchingGroup:
+      group: global.hlmark
+      matchAll: true
+    tracking: 0
+    format-hint: H
+  - type: realtime.text
+    key: min(indoor.humidity.humidity#bedroom, 24h)
+    title: false
+    alignment: BottomLeft
+    display:
+      unitPosition: Inline
+      precision: 0
+      valueLabel:
+        color: $muted
+        font: Allo Variable
+        weight: Medium
+        matchingGroup:
+          group: global.hl
+          matchAll: true
+        number-align: end
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
+      format-hint: 00%
+    geometry:
+      x: 96.16%
+      y: 34.8%
+      width: 1.84%
+      height: 2.0%
     margins:
       left: 0
       right: 0
@@ -1055,8 +1151,104 @@ items:
     geometry:
       x: 89.2%
       y: 40.15%
-      width: 8.8%
+      width: 5.984%
       height: 4.2%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
+  - type: text
+    text: H
+    font: $display
+    weight: Medium
+    color: $faint
+    alignment: BottomLeft
+    geometry:
+      x: 95.36%
+      y: 40.7%
+      width: 0.8%
+      height: 1.25%
+    matchingGroup:
+      group: global.hlmark
+      matchAll: true
+    tracking: 0
+    format-hint: H
+  - type: realtime.text
+    key: max(indoor.temperature.dewpoint#bedroom, 24h)
+    title: false
+    alignment: BottomLeft
+    display:
+      unitPosition: Inline
+      precision: 0
+      valueLabel:
+        color: $muted
+        font: Allo Variable
+        weight: Medium
+        matchingGroup:
+          group: global.hl
+          matchAll: true
+        number-align: end
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
+      format-hint: 00°
+    geometry:
+      x: 96.16%
+      y: 40.15%
+      width: 1.84%
+      height: 2.0%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
+  - type: text
+    text: L
+    font: $display
+    weight: Medium
+    color: $faint
+    alignment: BottomLeft
+    geometry:
+      x: 95.36%
+      y: 42.57%
+      width: 0.8%
+      height: 1.25%
+    matchingGroup:
+      group: global.hlmark
+      matchAll: true
+    tracking: 0
+    format-hint: H
+  - type: realtime.text
+    key: min(indoor.temperature.dewpoint#bedroom, 24h)
+    title: false
+    alignment: BottomLeft
+    display:
+      unitPosition: Inline
+      precision: 0
+      valueLabel:
+        color: $muted
+        font: Allo Variable
+        weight: Medium
+        matchingGroup:
+          group: global.hl
+          matchAll: true
+        number-align: end
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
+      format-hint: 00°
+    geometry:
+      x: 96.16%
+      y: 42.35%
+      width: 1.84%
+      height: 2.0%
     margins:
       left: 0
       right: 0
@@ -1230,8 +1422,104 @@ items:
     geometry:
       x: 89.2%
       y: 52.2%
-      width: 8.8%
+      width: 5.984%
       height: 4.2%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
+  - type: text
+    text: H
+    font: $display
+    weight: Medium
+    color: $faint
+    alignment: BottomLeft
+    geometry:
+      x: 95.36%
+      y: 52.75%
+      width: 0.8%
+      height: 1.25%
+    matchingGroup:
+      group: global.hlmark
+      matchAll: true
+    tracking: 0
+    format-hint: H
+  - type: realtime.text
+    key: max(indoor.humidity.humidity#terrarium, 24h)
+    title: false
+    alignment: BottomLeft
+    display:
+      unitPosition: Inline
+      precision: 0
+      valueLabel:
+        color: $muted
+        font: Allo Variable
+        weight: Medium
+        matchingGroup:
+          group: global.hl
+          matchAll: true
+        number-align: end
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
+      format-hint: 00%
+    geometry:
+      x: 96.16%
+      y: 52.2%
+      width: 1.84%
+      height: 2.0%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
+  - type: text
+    text: L
+    font: $display
+    weight: Medium
+    color: $faint
+    alignment: BottomLeft
+    geometry:
+      x: 95.36%
+      y: 54.62%
+      width: 0.8%
+      height: 1.25%
+    matchingGroup:
+      group: global.hlmark
+      matchAll: true
+    tracking: 0
+    format-hint: H
+  - type: realtime.text
+    key: min(indoor.humidity.humidity#terrarium, 24h)
+    title: false
+    alignment: BottomLeft
+    display:
+      unitPosition: Inline
+      precision: 0
+      valueLabel:
+        color: $muted
+        font: Allo Variable
+        weight: Medium
+        matchingGroup:
+          group: global.hl
+          matchAll: true
+        number-align: end
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
+      format-hint: 00%
+    geometry:
+      x: 96.16%
+      y: 54.4%
+      width: 1.84%
+      height: 2.0%
     margins:
       left: 0
       right: 0
@@ -1277,8 +1565,104 @@ items:
     geometry:
       x: 89.2%
       y: 59.75%
-      width: 8.8%
+      width: 5.984%
       height: 4.2%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
+  - type: text
+    text: H
+    font: $display
+    weight: Medium
+    color: $faint
+    alignment: BottomLeft
+    geometry:
+      x: 95.36%
+      y: 60.3%
+      width: 0.8%
+      height: 1.25%
+    matchingGroup:
+      group: global.hlmark
+      matchAll: true
+    tracking: 0
+    format-hint: H
+  - type: realtime.text
+    key: max(indoor.temperature.dewpoint#terrarium, 24h)
+    title: false
+    alignment: BottomLeft
+    display:
+      unitPosition: Inline
+      precision: 0
+      valueLabel:
+        color: $muted
+        font: Allo Variable
+        weight: Medium
+        matchingGroup:
+          group: global.hl
+          matchAll: true
+        number-align: end
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
+      format-hint: 00°
+    geometry:
+      x: 96.16%
+      y: 59.75%
+      width: 1.84%
+      height: 2.0%
+    margins:
+      left: 0
+      right: 0
+      top: 0
+      bottom: 0
+  - type: text
+    text: L
+    font: $display
+    weight: Medium
+    color: $faint
+    alignment: BottomLeft
+    geometry:
+      x: 95.36%
+      y: 62.17%
+      width: 0.8%
+      height: 1.25%
+    matchingGroup:
+      group: global.hlmark
+      matchAll: true
+    tracking: 0
+    format-hint: H
+  - type: realtime.text
+    key: min(indoor.temperature.dewpoint#terrarium, 24h)
+    title: false
+    alignment: BottomLeft
+    display:
+      unitPosition: Inline
+      precision: 0
+      valueLabel:
+        color: $muted
+        font: Allo Variable
+        weight: Medium
+        matchingGroup:
+          group: global.hl
+          matchAll: true
+        number-align: end
+        alignment: BottomLeft
+        margins:
+          left: 0
+          right: 10%
+          top: 0
+          bottom: 0
+      format-hint: 00°
+    geometry:
+      x: 96.16%
+      y: 61.95%
+      width: 1.84%
+      height: 2.0%
     margins:
       left: 0
       right: 0

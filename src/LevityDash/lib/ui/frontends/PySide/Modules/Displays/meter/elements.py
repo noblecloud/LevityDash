@@ -4867,6 +4867,11 @@ class GaugeUnit(GaugeLabel):
 
 			if not self.parentItem().alignment == AlignmentFlag.Center:
 				return
+			# Nothing to dodge when either is hidden. A hidden needle still collides, so a hidden unit was pushed its whole
+			# travel on every refit, and since the next fit maps its place back from the scene, it crept away for ever and
+			# the text layout never settled.
+			if not self.isVisible() or not self.surface.needle.isVisible():
+				return
 
 			max_travel_distance = int(ceil(sqrt(sum(i ** 2 for i in self.limitRect.size().toTuple()))))
 

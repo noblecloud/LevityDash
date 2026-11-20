@@ -239,8 +239,17 @@ def room(caption, sfx, color, x, y, w, h, i):
 	                                         ('DEW POINT', key('temperature.dewpoint'), NEON['lime'], '00°'))):
 		ry = y + CAP + 0.8 + r * (hh * 0.5)
 		out += [cap_(name, g(xr, ry, wr, CAP)),
-		        num(k, g(xr, ry + CAP + 0.3, wr, 4.2), c, group='global.side', align='TopLeft', weight='Medium', font=TEMP_FONT,
+		        num(k, g(xr, ry + CAP + 0.3, wr * 0.68, 4.2), c, group='global.side', align='TopLeft', weight='Medium', font=TEMP_FONT,
 		            hint=hint, unit='Inline')]
+		# The last day's high over its low, small, in the space after the number: a faint H or L, then the value.
+		xh, wh, lh = xr + wr * 0.7, wr * 0.3, 2.0
+		for j, (mark, fn, lift) in enumerate((('H', 'max', 0), ('L', 'min', 0.33))):
+			yy = ry + CAP + 0.3 + j * (lh + 0.2)
+			# Letter and number both sit on the bottom of their boxes, so they share a baseline. The digits end on one line
+			# (a 100% over an 85% keeps its % in line). A lone L sits lower in its box than an H, so it is lifted to match.
+			out += [cap(mark, g(xh, yy + lh - 1.45 - lift, 0.8, 1.25), '$faint', align='BottomLeft', group='global.hlmark', tracking=0, **{'format-hint': 'H'}),
+			        num(f'{fn}({k}, 24h)', g(xh + 0.8, yy, wh - 0.8, lh), '$muted', group='global.hl', align='BottomLeft', font=TEMP_FONT,
+			            weight='Medium', hint=hint, unit='Inline', **{'number-align': 'end'})]
 	return out
 
 

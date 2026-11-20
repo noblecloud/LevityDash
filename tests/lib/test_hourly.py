@@ -36,7 +36,7 @@ def test_a_step_that_fits_nothing_is_refused():
 	({'rows': [{'key': 'a.b', 'colour': 'red'}]}, 'no setting colour'),
 	({'rows': [{'precision': 0}]}, 'no key'),
 	({'head': 'bold'}, 'clock, relative or none'),
-	({'numberAlign': 'left'}, 'decimal, end or none'),
+	({'numberAlign': 'left'}, 'end, decimal, char:X, nth:N or special:N'),
 ])
 def test_a_bad_row_says_what_is_wrong(change, message):
 	with pytest.raises(ValueError, match=message):
