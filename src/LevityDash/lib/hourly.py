@@ -121,8 +121,12 @@ def build(props: Dict[str, Any]) -> dict:
 	if head not in ('clock', 'relative', 'none'):
 		raise ValueError(f'head is {head!r}; it is clock, relative or none')
 	number_align = props.get('numberAlign')
-	if number_align not in ('decimal', 'end', 'none', None):
-		raise ValueError(f'numberAlign is {number_align!r}; it is decimal, end or none')
+	if number_align not in ('none', None):
+		from LevityDash.lib.ui import numberalign
+		try:
+			numberalign.parse(number_align)
+		except ValueError as error:
+			raise ValueError(f'numberAlign is {number_align!r}: {error}') from None
 	try:
 		step = float(props['step'])
 	except (TypeError, ValueError):
