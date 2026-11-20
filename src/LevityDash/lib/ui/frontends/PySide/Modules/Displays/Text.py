@@ -1,6 +1,6 @@
 
 from PySide6.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, Signal, Slot
-from PySide6.QtGui import QBrush, QColor, QFont, QFontInfo, QFontMetricsF, QPainter, QPainterPath, QPen, Qt, QTransform, QGradient
+from PySide6.QtGui import QBrush, QColor, QFont, QFontInfo, QFontMetricsF, QPainter, QPainterPath, QPainterPathStroker, QPen, Qt, QTransform, QGradient
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem
 from datetime import datetime, timedelta
 from dateutil.parser import parser
@@ -403,12 +403,33 @@ class Text(QGraphicsPathItem):
 		"""`font-axes: {corner}`: round the convex corners of the outlines by drawing them with a round-join pen
 		as wide as twice the radius (the font having been lightened to match, `_cornerWeight`). Robust where a path
 		boolean is not, and a font's own `ROND` is left to do what it can."""
-		width = 2 * self._cornerEm() * QFontInfo(font).pixelSize()
+		em = self._cornerEm()
+		small_runs = em > 0 and (self._decimalRatio(font) is not None or self.tailRun() is not None)
+		self._cornerBake = em if small_runs else 0.0
+		width = 0.0 if small_runs else 2 * em * QFontInfo(font).pixelSize()
 		if abs(width - self._cornerWidth) > 1e-6:
 			self._cornerWidth = width
 			self._applyInk()
 
 	_cornerWidth: float = 0.0
+	_cornerBake: float = 0.0
+
+	def _addRun(self, path: QPainterPath, pos: QPointF, font: QFont, text: str):
+		"""`text` in `font` onto `path`. With small runs (decimals, a unit tail) `corner` is not a pen on the whole
+		item, which would round every run by the main size's radius and fill the counters of the small digits: each run
+		gets the stroke of its own size added to its outline instead (a winding fill makes it a union)."""
+		if self._cornerBake <= 0:
+			path.addText(pos, font, text)
+			return
+		run = QPainterPath()
+		run.setFillRule(Qt.WindingFill)
+		run.addText(pos, font, text)
+		stroker = QPainterPathStroker()
+		stroker.setJoinStyle(Qt.RoundJoin)
+		stroker.setCapStyle(Qt.RoundCap)
+		stroker.setWidth(2 * self._cornerBake * QFontInfo(font).pixelSize())
+		run.addPath(stroker.createStroke(run))
+		path.addPath(run)
 
 	def setFontAxes(self, value):
 		self._fontAxes = value
@@ -571,10 +592,10 @@ class Text(QGraphicsPathItem):
 		path.setFillRule(Qt.WindingFill)
 		layout = self._decimalLayout(string, font)
 		if layout is None:
-			path.addText(QPointF(0, 0), font, string)
+			self._addRun(path, QPointF(0, 0), font, string)
 		else:
 			for text, run_font, x, dy in layout[0]:
-				path.addText(QPointF(x, dy), run_font, text)
+				self._addRun(path, QPointF(x, dy), run_font, text)
 		return path
 
 	def _advance(self, string: str, font: QFont) -> float:
@@ -1597,7 +1618,7 @@ class Text(QGraphicsPathItem):
 		path.addPath(self._runPath(text, font).translated(text_pos))
 		if tail_font:
 			# ink right edge of the text, then the gap; the tail's own left bearing is taken off so its ink starts there
-			path.addText(QPointF(text_rect.left() + main_width + tail_gap - tail_bearing, text_pos.y()), tail_font, tail_run[0])
+			self._addRun(path, QPointF(text_rect.left() + main_width + tail_gap - tail_bearing, text_pos.y()), tail_font, tail_run[0])
 			fmt_hint_text_path.addText(QPointF(fmt_hint_rect.left() + hint_width + tail_gap - tail_bearing, fmt_text_pos.y()), tail_font, tail_run[0])
 
 		# Determine the scale type and add the path to the size hint path
