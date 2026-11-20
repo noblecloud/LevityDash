@@ -24,6 +24,8 @@ GLOW = {'strength': 1.2, 'reach': 2.0, 'passes': 6}
 INDOOR = [('INDOOR', '', '$series-2')]
 LABEL = 'Barlow Condensed'
 CAP = 1.5
+# Bright, saturated colours for the room readings (Neal: neon, not muted).
+NEON = {'cyan': '#2ee6ff', 'lime': '#7dff4f'}
 ROOM = 5.8  # the room size: a reading read across the room has a value box this tall
 TILE = 3.6  # the detail size: every reading read up close has a value box this tall
 
@@ -227,10 +229,18 @@ def room(caption, sfx, color, x, y, w, h, i):
 		num(temp, g(x, y + CAP + 0.8, left - 0.8, hh * 0.62), '$text', weight='Bold', tracking=-0.02, unit='Inline', hint='00.0°', precision=1, small=True,
 		    group='global.room', align='TopLeft', font=TEMP_FONT, **tempAxes()),
 	]
-	rows = [('RH', key('humidity.humidity'), '$info', {'hint': '00%', 'unit': 'Inline'}),
-	        ('DEW', key('temperature.dewpoint'), '$good', {'hint': '00°', 'unit': 'Inline'})]
+	rows = [('RH', key('humidity.humidity'), NEON['cyan'], {'hint': '00%', 'unit': 'Inline'}),
+	        ('DEW', key('temperature.dewpoint'), NEON['lime'], {'hint': '00°', 'unit': 'Inline'})]
+	# RH sits on the temperature's baseline; dew point under it, on the panel's bottom edge. Each caption is at the left
+	# of the column, on its value's baseline.
+	rowH = 4.6
+	base = y + CAP + 0.8 + hh * 0.62 - 0.9
+	spots = [base - rowH, y + h - rowH - 0.6]
 	for r, (name, k, c, kw) in enumerate(rows):
-		out += tile(name, k, x + left, y + r * h / 2, w - left, c, h=ROOM, group='global.side', right=True, weight='SemiBold', **kw)
+		ry = spots[r]
+		out += [cap_(name, g(x + left + 0.4, ry + rowH - CAP, 4.2, CAP)),
+		        num(k, g(x + left + 2.6, ry, w - left - 2.6, rowH), c, group='global.side', align='BottomRight', weight='SemiBold', **kw)]
+		out[-1]['display']['valueLabel']['margins'] = {'left': 0, 'right': 0, 'top': 0, 'bottom': 0}
 	return out
 
 
