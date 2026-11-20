@@ -22,7 +22,11 @@ theme:
     moon-shade:
       color: '#000000'
       alpha: 0.2
-    bad: '#ff5d55'
+    bad: '#ff4f5e'
+    warn: '#ffc23a'
+    good: '#5eef8e'
+    info: '#4cc3ff'
+    accent: '#ffa156'
 items:
 - type: group
   name: board
@@ -111,8 +115,8 @@ items:
           - 20°F
           - 95°F
           wght:
-          - 600
-          - 900
+          - 500
+          - 800
           ROND:
           - 0
           - 100
@@ -960,15 +964,15 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: RH
+    text: HUMIDITY
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 89.0%
-      y: 37.762%
-      width: 4.2%
+      x: 89.2%
+      y: 30.8%
+      width: 8.8%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -978,44 +982,44 @@ items:
   - type: realtime.text
     key: indoor.humidity.humidity#bedroom
     title: false
-    alignment: BottomRight
+    alignment: TopLeft
     display:
       unitPosition: Inline
       precision: 0
       valueLabel:
-        color: '#2ee6ff'
-        font: $mono
-        weight: SemiBold
+        color: '#40e2f3'
+        font: Allo Variable
+        weight: Medium
         matchingGroup:
           group: global.side
           matchAll: true
-        alignment: BottomRight
+        alignment: TopLeft
         margins:
           left: 0
-          right: 0
+          right: 10%
           top: 0
           bottom: 0
       format-hint: 00%
     geometry:
-      x: 91.2%
-      y: 34.662%
-      width: 6.8%
-      height: 4.6%
+      x: 89.2%
+      y: 32.6%
+      width: 8.8%
+      height: 4.2%
     margins:
       left: 0
       right: 0
       top: 0
       bottom: 0
   - type: text
-    text: DEW
+    text: DEW POINT
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 89.0%
-      y: 43.8%
-      width: 4.2%
+      x: 89.2%
+      y: 38.35%
+      width: 8.8%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1025,29 +1029,29 @@ items:
   - type: realtime.text
     key: indoor.temperature.dewpoint#bedroom
     title: false
-    alignment: BottomRight
+    alignment: TopLeft
     display:
       unitPosition: Inline
       precision: 0
       valueLabel:
-        color: '#7dff4f'
-        font: $mono
-        weight: SemiBold
+        color: '#5eef8e'
+        font: Allo Variable
+        weight: Medium
         matchingGroup:
           group: global.side
           matchAll: true
-        alignment: BottomRight
+        alignment: TopLeft
         margins:
           left: 0
-          right: 0
+          right: 10%
           top: 0
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 91.2%
-      y: 40.7%
-      width: 6.8%
-      height: 4.6%
+      x: 89.2%
+      y: 40.15%
+      width: 8.8%
+      height: 4.2%
     margins:
       left: 0
       right: 0
@@ -1182,15 +1186,15 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: RH
+    text: HUMIDITY
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 89.0%
-      y: 57.362%
-      width: 4.2%
+      x: 89.2%
+      y: 50.4%
+      width: 8.8%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1200,44 +1204,44 @@ items:
   - type: realtime.text
     key: indoor.humidity.humidity#terrarium
     title: false
-    alignment: BottomRight
+    alignment: TopLeft
     display:
       unitPosition: Inline
       precision: 0
       valueLabel:
-        color: '#2ee6ff'
-        font: $mono
-        weight: SemiBold
+        color: '#40e2f3'
+        font: Allo Variable
+        weight: Medium
         matchingGroup:
           group: global.side
           matchAll: true
-        alignment: BottomRight
+        alignment: TopLeft
         margins:
           left: 0
-          right: 0
+          right: 10%
           top: 0
           bottom: 0
       format-hint: 00%
     geometry:
-      x: 91.2%
-      y: 54.262%
-      width: 6.8%
-      height: 4.6%
+      x: 89.2%
+      y: 52.2%
+      width: 8.8%
+      height: 4.2%
     margins:
       left: 0
       right: 0
       top: 0
       bottom: 0
   - type: text
-    text: DEW
+    text: DEW POINT
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 89.0%
-      y: 63.4%
-      width: 4.2%
+      x: 89.2%
+      y: 57.95%
+      width: 8.8%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1247,29 +1251,29 @@ items:
   - type: realtime.text
     key: indoor.temperature.dewpoint#terrarium
     title: false
-    alignment: BottomRight
+    alignment: TopLeft
     display:
       unitPosition: Inline
       precision: 0
       valueLabel:
-        color: '#7dff4f'
-        font: $mono
-        weight: SemiBold
+        color: '#5eef8e'
+        font: Allo Variable
+        weight: Medium
         matchingGroup:
           group: global.side
           matchAll: true
-        alignment: BottomRight
+        alignment: TopLeft
         margins:
           left: 0
-          right: 0
+          right: 10%
           top: 0
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 91.2%
-      y: 60.3%
-      width: 6.8%
-      height: 4.6%
+      x: 89.2%
+      y: 59.75%
+      width: 8.8%
+      height: 4.2%
     margins:
       left: 0
       right: 0
