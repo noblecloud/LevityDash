@@ -46,7 +46,19 @@ class LevityDashApp(QApplication):
 			connectSignal(self.main_window.view.loadingFinished, self.start_plugins)
 
 		self.main_window.show()
+		self._startScreenshotServer()
 		return self.exec_()
+
+	def _startScreenshotServer(self):
+		from LevityDash.lib.config import userConfig
+		try:
+			port = userConfig.getOrSet('Debug', 'screenshot-port', 0, userConfig.getint)
+			if port:
+				from .screenshot import start
+				self._screenshotServer = start(self.main_window, port)
+				qtLogger.warning(f'screenshots: http://127.0.0.1:{port}/screenshot')
+		except Exception as e:  # noqa: BLE001 - a debug aid must never stop the display
+			qtLogger.error(f'screenshot server not started: {e}')
 
 	def start_plugins(self):
 		self.main_window.view.loadingFinished.disconnect(self.start_plugins)
