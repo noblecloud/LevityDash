@@ -148,6 +148,32 @@ def test_degree_sign_tucks_over_baseline_decimals(dashboard):
 		# at the top the fraction is level with the mark, so it keeps its own place
 		item.setDecimalAlign('top')
 		placed, total = item._layoutRuns(item._decimalRuns('60.5°', font))
-		assert placed[2][2] == pytest.approx(placed[1][2] + QFontMetricsF(runs[1][1]).horizontalAdvance('.5'))
+		fraction = item._glyphInk('.5', runs[1][1]).translated(placed[1][2], placed[1][3])
+		mark = item._glyphInk('\u00b0', runs[2][1]).translated(placed[2][2], 0)
+		assert mark.left() > fraction.right()
+	finally:
+		item.scene() and item.scene().removeItem(item)
+
+
+@pytest.mark.parametrize('family', ['Nunito', 'Roboto Mono', 'Allo Variable'])
+@pytest.mark.parametrize('align', ['baseline', 'center', 'top'])
+def test_degree_sign_never_lands_on_the_fraction(dashboard, family, align):
+	from PySide6.QtGui import QPainterPath
+	panel = dashboard.scene.base
+	item = Text(panel, value='67.7°')
+	item.setDecimalScale(0.55)
+	item.setDecimalAlign(align)
+	try:
+		font = QFont(family)
+		font.setPixelSize(200)
+		font.setLetterSpacing(QFont.AbsoluteSpacing, -0.06 * 200)
+		placed, total = item._layoutRuns(item._decimalRuns('67.7°', font))
+		ink = []
+		for text, run_font, x, dy in placed:
+			path = QPainterPath()
+			path.addText(x, dy, run_font, text)
+			ink.append(path)
+		assert not ink[1].intersects(ink[2]), f'{family} {align}: the mark is on the fraction'
+		assert not ink[0].intersects(ink[1]), f'{family} {align}: the fraction is on the integer digits'
 	finally:
 		item.scene() and item.scene().removeItem(item)
