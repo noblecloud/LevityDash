@@ -22,6 +22,7 @@ theme:
     moon-shade:
       color: '#000000'
       alpha: 0.2
+    bad: '#ff5d55'
 items:
 - type: group
   name: board
@@ -963,11 +964,11 @@ items:
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
-    alignment: BottomLeft
+    alignment: BottomRight
     geometry:
       x: 88.6%
       y: 28.5%
-      width: 4.4%
+      width: 9.4%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -977,63 +978,16 @@ items:
   - type: realtime.text
     key: indoor.humidity.humidity#bedroom
     title: false
-    alignment: BottomLeft
+    alignment: BottomRight
     display:
       unitPosition: Inline
       precision: 0
       valueLabel:
         color: $info
         font: $mono
-        weight: Regular
+        weight: SemiBold
         matchingGroup:
-          group: global.detail
-          matchAll: true
-        alignment: BottomLeft
-        margins:
-          left: 0
-          right: 10%
-          top: 0
-          bottom: 0
-      format-hint: 00%
-    geometry:
-      x: 88.6%
-      y: 30.4%
-      width: 4.4%
-      height: 3.6%
-    margins:
-      left: 0
-      right: 0
-      top: 0
-      bottom: 0
-  - type: text
-    text: 24H HI
-    font: Barlow Condensed
-    weight: SemiBold
-    color: $faint
-    alignment: BottomRight
-    geometry:
-      x: 93.3%
-      y: 28.5%
-      width: 4.4%
-      height: 1.5%
-    matchingGroup:
-      group: global.cap
-      matchAll: true
-    tracking: 0.16
-    format-hint: HEADING
-  - type: realtime.text
-    key: max(indoor.temperature.temperature#bedroom, 24h)
-    title: false
-    alignment: BottomRight
-    display:
-      unitPosition: Inline
-      precision: 0
-      valueLabel:
-        color: $bad
-        font: $mono
-        weight: Regular
-        matchingGroup:
-          group: global.detail
+          group: global.side
           matchAll: true
         alignment: BottomRight
         margins:
@@ -1041,12 +995,12 @@ items:
           right: 0
           top: 0
           bottom: 0
-      format-hint: 00°
+      format-hint: 00%
     geometry:
-      x: 93.3%
+      x: 88.6%
       y: 30.4%
-      width: 4.4%
-      height: 3.6%
+      width: 9.4%
+      height: 5.8%
     margins:
       left: 0
       right: 0
@@ -1057,11 +1011,11 @@ items:
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
-    alignment: BottomLeft
+    alignment: BottomRight
     geometry:
       x: 88.6%
       y: 37.2%
-      width: 4.4%
+      width: 9.4%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1071,63 +1025,16 @@ items:
   - type: realtime.text
     key: indoor.temperature.dewpoint#bedroom
     title: false
-    alignment: BottomLeft
+    alignment: BottomRight
     display:
       unitPosition: Inline
       precision: 0
       valueLabel:
         color: $good
         font: $mono
-        weight: Regular
+        weight: SemiBold
         matchingGroup:
-          group: global.detail
-          matchAll: true
-        alignment: BottomLeft
-        margins:
-          left: 0
-          right: 10%
-          top: 0
-          bottom: 0
-      format-hint: 00°
-    geometry:
-      x: 88.6%
-      y: 39.1%
-      width: 4.4%
-      height: 3.6%
-    margins:
-      left: 0
-      right: 0
-      top: 0
-      bottom: 0
-  - type: text
-    text: 24H LO
-    font: Barlow Condensed
-    weight: SemiBold
-    color: $faint
-    alignment: BottomRight
-    geometry:
-      x: 93.3%
-      y: 37.2%
-      width: 4.4%
-      height: 1.5%
-    matchingGroup:
-      group: global.cap
-      matchAll: true
-    tracking: 0.16
-    format-hint: HEADING
-  - type: realtime.text
-    key: min(indoor.temperature.temperature#bedroom, 24h)
-    title: false
-    alignment: BottomRight
-    display:
-      unitPosition: Inline
-      precision: 0
-      valueLabel:
-        color: $info
-        font: $mono
-        weight: Regular
-        matchingGroup:
-          group: global.detail
+          group: global.side
           matchAll: true
         alignment: BottomRight
         margins:
@@ -1137,10 +1044,10 @@ items:
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 93.3%
+      x: 88.6%
       y: 39.1%
-      width: 4.4%
-      height: 3.6%
+      width: 9.4%
+      height: 5.8%
     margins:
       left: 0
       right: 0
@@ -1279,11 +1186,11 @@ items:
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
-    alignment: BottomLeft
+    alignment: BottomRight
     geometry:
       x: 88.6%
       y: 48.1%
-      width: 4.4%
+      width: 9.4%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1293,63 +1200,16 @@ items:
   - type: realtime.text
     key: indoor.humidity.humidity#terrarium
     title: false
-    alignment: BottomLeft
+    alignment: BottomRight
     display:
       unitPosition: Inline
       precision: 0
       valueLabel:
         color: $info
         font: $mono
-        weight: Regular
+        weight: SemiBold
         matchingGroup:
-          group: global.detail
-          matchAll: true
-        alignment: BottomLeft
-        margins:
-          left: 0
-          right: 10%
-          top: 0
-          bottom: 0
-      format-hint: 00%
-    geometry:
-      x: 88.6%
-      y: 50.0%
-      width: 4.4%
-      height: 3.6%
-    margins:
-      left: 0
-      right: 0
-      top: 0
-      bottom: 0
-  - type: text
-    text: 24H HI
-    font: Barlow Condensed
-    weight: SemiBold
-    color: $faint
-    alignment: BottomRight
-    geometry:
-      x: 93.3%
-      y: 48.1%
-      width: 4.4%
-      height: 1.5%
-    matchingGroup:
-      group: global.cap
-      matchAll: true
-    tracking: 0.16
-    format-hint: HEADING
-  - type: realtime.text
-    key: max(indoor.temperature.temperature#terrarium, 24h)
-    title: false
-    alignment: BottomRight
-    display:
-      unitPosition: Inline
-      precision: 0
-      valueLabel:
-        color: $bad
-        font: $mono
-        weight: Regular
-        matchingGroup:
-          group: global.detail
+          group: global.side
           matchAll: true
         alignment: BottomRight
         margins:
@@ -1357,12 +1217,12 @@ items:
           right: 0
           top: 0
           bottom: 0
-      format-hint: 00°
+      format-hint: 00%
     geometry:
-      x: 93.3%
+      x: 88.6%
       y: 50.0%
-      width: 4.4%
-      height: 3.6%
+      width: 9.4%
+      height: 5.8%
     margins:
       left: 0
       right: 0
@@ -1373,11 +1233,11 @@ items:
     font: Barlow Condensed
     weight: SemiBold
     color: $faint
-    alignment: BottomLeft
+    alignment: BottomRight
     geometry:
       x: 88.6%
       y: 56.8%
-      width: 4.4%
+      width: 9.4%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1387,63 +1247,16 @@ items:
   - type: realtime.text
     key: indoor.temperature.dewpoint#terrarium
     title: false
-    alignment: BottomLeft
+    alignment: BottomRight
     display:
       unitPosition: Inline
       precision: 0
       valueLabel:
         color: $good
         font: $mono
-        weight: Regular
+        weight: SemiBold
         matchingGroup:
-          group: global.detail
-          matchAll: true
-        alignment: BottomLeft
-        margins:
-          left: 0
-          right: 10%
-          top: 0
-          bottom: 0
-      format-hint: 00°
-    geometry:
-      x: 88.6%
-      y: 58.7%
-      width: 4.4%
-      height: 3.6%
-    margins:
-      left: 0
-      right: 0
-      top: 0
-      bottom: 0
-  - type: text
-    text: 24H LO
-    font: Barlow Condensed
-    weight: SemiBold
-    color: $faint
-    alignment: BottomRight
-    geometry:
-      x: 93.3%
-      y: 56.8%
-      width: 4.4%
-      height: 1.5%
-    matchingGroup:
-      group: global.cap
-      matchAll: true
-    tracking: 0.16
-    format-hint: HEADING
-  - type: realtime.text
-    key: min(indoor.temperature.temperature#terrarium, 24h)
-    title: false
-    alignment: BottomRight
-    display:
-      unitPosition: Inline
-      precision: 0
-      valueLabel:
-        color: $info
-        font: $mono
-        weight: Regular
-        matchingGroup:
-          group: global.detail
+          group: global.side
           matchAll: true
         alignment: BottomRight
         margins:
@@ -1453,10 +1266,10 @@ items:
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 93.3%
+      x: 88.6%
       y: 58.7%
-      width: 4.4%
-      height: 3.6%
+      width: 9.4%
+      height: 5.8%
     margins:
       left: 0
       right: 0

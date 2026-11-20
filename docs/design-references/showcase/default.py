@@ -24,6 +24,7 @@ GLOW = {'strength': 1.2, 'reach': 2.0, 'passes': 6}
 INDOOR = [('INDOOR', '', '$series-2')]
 LABEL = 'Barlow Condensed'
 CAP = 1.5
+ROOM = 5.8  # the room size: a reading read across the room has a value box this tall
 TILE = 3.6  # the detail size: every reading read up close has a value box this tall
 
 
@@ -215,7 +216,9 @@ def room(caption, sfx, color, x, y, w, h, i):
 		for j, (name, k, c, kw) in enumerate(rows):
 			out += tile(name, k, x + j * quarter, y + h - 5.4, quarter - 0.6, c, h=TILE, group='global.detail', right=j == len(rows) - 1, **kw)
 		return out
-	# Short: the number over its day on the left, two readings stacked on the right.
+	# Short: the number over its day on the left (the curve shows the day's range); humidity and dew point stacked on the
+	# right as big as the outdoor high and low (their own size group, so the temperature keeps its size), read from
+	# across the room.
 	hh = h - CAP - 0.8
 	left = w * 0.6
 	out += [
@@ -224,15 +227,10 @@ def room(caption, sfx, color, x, y, w, h, i):
 		num(temp, g(x, y + CAP + 0.8, left - 0.8, hh * 0.62), '$text', weight='Bold', tracking=-0.02, unit='Inline', hint='00.0°', precision=1, small=True,
 		    group='global.room', align='TopLeft', font=TEMP_FONT, **tempAxes()),
 	]
-	# Four readings in two columns, the outer one flush to the board's edge so the panel reaches it.
 	rows = [('RH', key('humidity.humidity'), '$info', {'hint': '00%', 'unit': 'Inline'}),
-	        ('24H HI', f'max({temp}, 24h)', '$bad', {'hint': '00°', 'unit': 'Inline'}),
-	        ('DEW', key('temperature.dewpoint'), '$good', {'hint': '00°', 'unit': 'Inline'}),
-	        ('24H LO', f'min({temp}, 24h)', '$info', {'hint': '00°', 'unit': 'Inline'})]
-	col = (w - left) / 2
-	for j, (name, k, c, kw) in enumerate(rows):
-		r, cc = divmod(j, 2)
-		out += tile(name, k, x + left + cc * col, y + r * h / 2, col - 0.3, c, h=TILE, group='global.detail', right=bool(cc), **kw)
+	        ('DEW', key('temperature.dewpoint'), '$good', {'hint': '00°', 'unit': 'Inline'})]
+	for r, (name, k, c, kw) in enumerate(rows):
+		out += tile(name, k, x + left, y + r * h / 2, w - left, c, h=ROOM, group='global.side', right=True, weight='SemiBold', **kw)
 	return out
 
 
@@ -495,7 +493,7 @@ def board(rooms=INDOOR):
 	# The ground follows the sun and is greyed by cloud; at night the real sky (bright-star catalogue and planets, placed
 	# for the configured location and time) comes out, thinned by cloud.
 	sky = {'sky': True, 'haze': f'{C}.cover', 'stars': True}
-	return {'background': sky, 'theme': {'extends': 'default', 'colors': {'moon-shade': {'color': '#000000', 'alpha': 0.2}}}, 'items': [{'type': 'group', 'name': 'board', 'items': B}]}
+	return {'background': sky, 'theme': {'extends': 'default', 'colors': {'moon-shade': {'color': '#000000', 'alpha': 0.2}, 'bad': '#ff5d55'}}, 'items': [{'type': 'group', 'name': 'board', 'items': B}]}
 
 
 HEADER = """
