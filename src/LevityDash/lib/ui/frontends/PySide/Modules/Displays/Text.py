@@ -330,9 +330,11 @@ class Text(QGraphicsPathItem):
 			self._applyAxes(font)
 		if self._italic:
 			font.setItalic(True)
-		if self._tracking:
+		# The `corner` stroke widens every glyph by twice its radius into the gap, so the gap is opened by as much.
+		tracking = self._tracking + (2 * self._cornerEm() if self._fontAxes is not None else 0.0)
+		if tracking:
 			# In em, as CSS letter-spacing: the gap grows with the text.
-			font.setLetterSpacing(QFont.AbsoluteSpacing, self._tracking * QFontInfo(font).pixelSize())
+			font.setLetterSpacing(QFont.AbsoluteSpacing, tracking * QFontInfo(font).pixelSize())
 		return font
 
 	@staticmethod
@@ -365,6 +367,7 @@ class Text(QGraphicsPathItem):
 		self._cornerWeight(font, settings)
 
 	_stemRate: dict = {}
+	_cornerLighten: float = 1.3
 
 	def _cornerEm(self) -> float:
 		return float(self._axisSettings().get('corner') or 0.0) if self._fontAxes is not None else 0.0
@@ -397,7 +400,7 @@ class Text(QGraphicsPathItem):
 		if em <= 0 or weight is None:
 			return
 		if rate := self._stemPerWeight(font):
-			font.setVariableAxis(QFont.Tag('wght'), max(1.0, weight - 2 * em / rate))
+			font.setVariableAxis(QFont.Tag('wght'), max(1.0, weight - self._cornerLighten * 2 * em / rate))
 
 	def _applyCorner(self, font: QFont):
 		"""`font-axes: {corner}`: round the convex corners of the outlines by drawing them with a round-join pen
@@ -594,8 +597,9 @@ class Text(QGraphicsPathItem):
 		if layout is None:
 			self._addRun(path, QPointF(0, 0), font, string)
 		else:
-			for text, run_font, x, dy in layout[0]:
-				self._addRun(path, QPointF(x, dy), run_font, text)
+			gap = self._cornerBake * QFontInfo(font).pixelSize()  # the stroke widens the main digits into the point
+			for n, (text, run_font, x, dy) in enumerate(layout[0]):
+				self._addRun(path, QPointF(x + (gap if n else 0.0), dy), run_font, text)
 		return path
 
 	def _advance(self, string: str, font: QFont) -> float:
