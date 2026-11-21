@@ -420,6 +420,8 @@ class LevitySceneView(QGraphicsView):
 			self.setRenderHint(QPainter.SmoothPixmapTransform, antialiasing)
 			self.setRenderHint(QPainter.TextAntialiasing, antialiasing)
 		self.viewport().setPalette(colorPalette)
+		from LevityDash.lib.ui.frontends.PySide import frametiming
+		self.frameLog = frametiming.install(self)
 		self.maxTextureSize = userConfig.getOrSet('QtOptions', 'maxTextureSize', '20mb', getter=userConfig.configToFileSize)
 		guiLog.debug(f'Max texture size set to {self.maxTextureSize / 1000:.0f}KB')
 		self.pixmapCacheSize = int(userConfig.getOrSet('QtOptions', 'pixmapCacheSize', '200mb', getter=userConfig.configToFileSize) / 1024)
@@ -624,10 +626,20 @@ class LevitySceneView(QGraphicsView):
 		# The viewport only: the window frame and the rest of the app keep the system palette.
 		self.viewport().setPalette(applyThemeToPalette(colorPalette, active))
 
+	frameLog = None
+
 	def paintEvent(self, event):
 		if self.canvasMode:
 			return  # the canvas layer underneath draws the scene; the viewport stays transparent
+		frameLog = self.frameLog
+		if frameLog is None:
+			super().paintEvent(event)
+			return
+		started = perf_counter()
 		super().paintEvent(event)
+		viewport = self.viewport()
+		area = event.region().boundingRect()
+		frameLog.paint(started, perf_counter() - started, area.width() * area.height() / max(viewport.width() * viewport.height(), 1))
 
 	def resizeEvent(self, event):
 		super(LevitySceneView, self).resizeEvent(event)
