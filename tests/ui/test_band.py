@@ -117,3 +117,47 @@ def test_when_takes_an_item_out_of_the_ring(dashboard, slot):
 	assert child(band, 'c1').isVisible() and len(band.shown) == 5
 	assert at(child(band, 'c2')) == pytest.approx(2 * third, rel=0.01)
 	assert at(child(band, 'c1')) == pytest.approx(third, rel=0.01)
+
+
+def test_step_slides_pictures_and_puts_items_back(dashboard, slot):
+	"""During a move each item is a picture (the real one is transparent and stays put); after it, the real items
+	are back, opaque, at the new place, and the pictures are gone from the scene."""
+	from LevityDash.lib.ui.frontends.PySide.snapshot import Snapshot
+	band = make(slot, mode='step', transition='300ms')
+	pump(dashboard.app, 0.3)
+	stride = band.rect().width() / 3
+	band._dwellTimer.stop()
+	band._advance()
+	assert band._animation is not None
+	assert set(band._snapshots) == set(band.shown)
+	c1 = child(band, 'c1')
+	assert c1.opacity() == 0.0
+	before = band._snapshots[c1].transform().dx()
+	pump(dashboard.app, 0.15)
+	assert band._snapshots[c1].transform().dx() < before  # the picture moves left
+	assert c1.transform().dx() == pytest.approx(0)  # the real item waits
+	pump(dashboard.app, 0.4)
+	assert band._animation is None and not band._snapshots
+	assert c1.opacity() == 1.0
+	assert c1.pos().x() + c1.transform().dx() == pytest.approx(0, abs=1)
+	assert child(band, 'c0').transform().dx() == pytest.approx(-stride, rel=0.01)
+	assert not [i for i in dashboard.scene.items() if isinstance(i, Snapshot)]
+
+
+def test_stopping_mid_step_restores_items(dashboard, slot):
+	band = make(slot, mode='step', transition='2s')
+	pump(dashboard.app, 0.3)
+	band._dwellTimer.stop()
+	band._advance()
+	pump(dashboard.app, 0.1)
+	band._stopClock()
+	assert not band._snapshots
+	assert all(c.opacity() == 1.0 for c in band.choices)
+
+
+def test_no_pictures_with_cache_off(dashboard, slot):
+	band = make(slot, mode='step', transition='300ms', cache=False)
+	pump(dashboard.app, 0.3)
+	band._dwellTimer.stop()
+	band._advance()
+	assert band._animation is not None and not band._snapshots

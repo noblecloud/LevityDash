@@ -11,8 +11,12 @@ event loop, so a slow or juddery display can be measured without a profiler:
   update repainted everything, which is what a GL viewport may do);
 * ``fps``: paints per second, and ``gap_ms`` the time between the starts of successive paints while
   the display was animating (a gap over 33 ms is a dropped frame at 30 fps);
-* ``lag_ms``: how late an 8 ms timer fired, a direct reading of how long the GUI thread was busy
-  with something else (a data update, a layout, Python work) when it should have been free.
+* ``swap_ms``: with a ``QOpenGLWidget`` viewport, the time from the start of a paint to the widget's
+  ``frameSwapped`` (the paint, the GPU flush and the wait for the compositor); absent otherwise;
+* ``lag_ms``: how late a precise 16 ms timer fired, a reading of how long the GUI thread was busy
+  with something else (a data update, a layout, Python work) when it should have been free. On macOS
+  read it next to an idle line: the system also delays timers (an earlier 8 ms coarse timer read
+  ~35 ms late even in an empty Qt app), and that floor is the platform's, not the app's.
 
 Off unless the variable is set; costs two ``perf_counter`` calls per paint when on.
 """
@@ -23,7 +27,7 @@ from collections import deque
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QObject, QTimer
+from PySide6.QtCore import QObject, Qt, QTimer
 
 
 def _summary(values) -> dict:
@@ -48,25 +52,37 @@ class FrameLog(QObject):
 		self._share: list = []
 		self._gaps: list = []
 		self._lag: list = []
+		self._swaps: list = []
+		self._paintStart: Optional[float] = None
 		self._lastStart: Optional[float] = None
 		self._since = time.monotonic()
 		self._tickAt = time.perf_counter()
-		self._tick = QTimer(self, interval=8)
+		self._tick = QTimer(self, interval=16)
+		self._tick.setTimerType(Qt.TimerType.PreciseTimer)
 		self._tick.timeout.connect(self._onTick)
 		self._tick.start()
 		self._flush = QTimer(self, interval=int(every * 1000))
 		self._flush.timeout.connect(self.write)
 		self._flush.start()
+		swapped = getattr(view.viewport(), 'frameSwapped', None)
+		if swapped is not None:
+			swapped.connect(self._onSwap)
+
+	def _onSwap(self):
+		if self._paintStart is not None:
+			self._swaps.append(time.perf_counter() - self._paintStart)
+			self._paintStart = None
 
 	def _onTick(self):
 		now = time.perf_counter()
-		self._lag.append(max(now - self._tickAt - 0.008, 0.0))
+		self._lag.append(max(now - self._tickAt - 0.016, 0.0))
 		self._tickAt = now
 
 	def paint(self, started: float, duration: float, share: float):
 		if self._lastStart is not None and started - self._lastStart < 1.0:
 			self._gaps.append(started - self._lastStart)
 		self._lastStart = started
+		self._paintStart = started
 		self._paints.append(duration)
 		self._share.append(share)
 
@@ -77,7 +93,7 @@ class FrameLog(QObject):
 			'time': time.strftime('%Y-%m-%dT%H:%M:%S%z'), 'seconds': round(elapsed, 1),
 			'viewport': type(self.view.viewport()).__name__, 'fps': round(len(self._paints) / elapsed, 1),
 			'paint_ms': _summary(self._paints), 'painted_share': share, 'gap_ms': _summary(self._gaps),
-			'lag_ms': _summary(self._lag), 'lag_over_16ms': len([x for x in self._lag if x > 0.016]),
+			'swap_ms': _summary(self._swaps) if self._swaps else None, 'lag_ms': _summary(self._lag), 'lag_over_16ms': len([x for x in self._lag if x > 0.016]),
 		}
 		try:
 			self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -85,7 +101,7 @@ class FrameLog(QObject):
 				f.write(json.dumps(line) + '\n')
 		except OSError:
 			pass
-		self._paints, self._share, self._gaps, self._lag = [], [], [], []
+		self._paints, self._share, self._gaps, self._lag, self._swaps = [], [], [], [], []
 		self._since = time.monotonic()
 
 
