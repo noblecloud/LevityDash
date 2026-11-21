@@ -2,7 +2,7 @@ import pytest
 
 from LevityDash.lib.plugins.builtin.Aircraft import (
 	AIRCRAFT_KEYS, SLOTS_MAX, Aircraft, bearingDistance, closingSpeed, feedUrl, lookoutRadius, nextInterval,
-	parseAircraft, retryDelay, slotValues,
+	decodePath, encodePath, parseAircraft, pathStraightness, projectPath, retryDelay, slotValues, toXY,
 )
 
 HOME = (40.0, -75.0)
@@ -146,3 +146,47 @@ def test_max_altitude_drops_high_aircraft_but_keeps_military():
 	rows = parseAircraft({'ac': [low, jet, mil]}, *HOME, radius=50, maxAltitude=10000, military=False)
 	assert {r['callsign'] for r in rows} == {'LOW'}
 	assert len(parseAircraft({'ac': [low, jet, mil]}, *HOME, radius=50)) == 3
+
+
+def test_a_straight_transit_scores_high_and_a_circuit_scores_low():
+	import math
+	# A transit: 6 miles due north, then 6 more due north, in 30 s steps.
+	straight = [(0.0, 0, 3.0), (30.0, 0, 4.0), (60.0, 0, 5.0), (90.0, 0, 6.0)]
+	assert pathStraightness(straight) == pytest.approx(1.0)
+	# A left-hand circuit three miles out, a quarter turn per 30 s.
+	circle = [(30.0 * i, (90 * i) % 360, 3.0) for i in range(5)]
+	assert pathStraightness(circle) < 0.7
+	# Too short in time, or not moving: unjudged rather than crooked.
+	assert pathStraightness([(0.0, 0, 3.0), (5.0, 10, 3.5)]) is None
+	assert pathStraightness([(0.0, 0, 3.0), (60.0, 0, 3.0)]) is None
+	assert pathStraightness([]) is None
+
+
+def test_the_heading_comes_from_the_path_not_from_one_jittery_fix():
+	# Due north of you, 10 nmi out, closing 2 nmi a minute: southbound at 120 kt. The middle fix jitters off to
+	# bearing 20, which must not move the answer.
+	fixes = [(0.0, 0.0, 10.0), (60.0, 20.0, 8.0), (120.0, 0.0, 6.0)]
+	heading, speed = projectPath(fixes)
+	assert heading == pytest.approx(180.0, abs=0.5)
+	assert speed == pytest.approx(120.0, abs=1.0)
+	assert projectPath([(0.0, 0, 5.0)]) is None
+	assert projectPath([(0.0, 0, 5.0), (60.0, 0, 5.0)]) is None, 'a parked or hovering aircraft projects nothing'
+
+
+def test_the_published_trail_round_trips_and_keeps_its_shape():
+	now = 1000.0
+	fixes = [(now - 300, 10.0, 4.0), (now - 240, 20.0, 4.5), (now - 60, 35.0, 6.0)]
+	text = encodePath(fixes, now)
+	assert text, 'a path encodes to something'
+	points = decodePath(text)
+	assert points[0] == (pytest.approx(300), pytest.approx(10.0), pytest.approx(4.0))
+	assert points[-1] == (pytest.approx(60), pytest.approx(35.0), pytest.approx(6.0))
+	assert decodePath('') == [] and decodePath('nonsense') == []
+
+
+def test_a_long_path_is_decimated_but_keeps_both_ends():
+	now = 5000.0
+	fixes = [(now - 1200 + i * 10, i % 360, 5.0 + i * 0.01) for i in range(121)]
+	points = decodePath(encodePath(fixes, now, points=20))
+	assert len(points) <= 21, 'at most the cap, plus the newest fix'
+	assert points[0][0] == pytest.approx(1200) and points[-1][1] == pytest.approx(120)

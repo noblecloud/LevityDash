@@ -196,3 +196,39 @@ def test_a_click_on_a_blip_in_the_popover_selects_it_and_a_click_elsewhere_close
 	assert panel.selected == 4 and popover.scene() is scene, 'a blip click names it and keeps the popover'
 	_click(popover, popover.boundingRect().topLeft())  # the backdrop, outside the disc
 	assert popover.scene() is None and panel._overlay is None, 'a click away closes it'
+
+
+def test_a_trail_is_painted_and_fades_with_age():
+	from PySide6.QtCore import QRectF
+	from PySide6.QtGui import QColor, QImage, QPainter
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar import draw, radar
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.geometry import polarPoint
+
+	def paint(paths):
+		image = QImage(400, 400, QImage.Format.Format_ARGB32)
+		image.fill(QColor('black'))
+		look = draw.Look(*(QColor('white') for _ in range(5)))
+		painter = QPainter(image)
+		radar.drawRadar(painter, look, QRectF(0, 0, 400, 400), [Blip('A', 0, 5, kind='B738')], 50, 4, 8,
+		                lambda alt: QColor('white'), 0, legend=False, glyphs=False, paths=paths)
+		painter.end()
+		return image
+
+	# Oldest point at 20 nmi due south, newest at 5 nmi due north, ten minutes apart.
+	path = [(600.0, 180, 20.0), (300.0, 180, 12.0), (0.0, 0, 5.0)]
+	bare, inked = paint(None), paint([path])
+	fontPx = max(8.0, 400 / 28)
+	radius = 200 - fontPx * 2.2
+
+	def added(point):
+		x, y = int(point[0]), int(point[1])
+		return sum(abs(inked.pixelColor(x + dx, y + dy).lightness() - bare.pixelColor(x + dx, y + dy).lightness())
+		           for dx in range(-2, 3) for dy in range(-2, 3))
+
+	# The trail runs from 20 nmi due south to 5 nmi due north, so sample the first leg and the last leg on their own
+	# headings: 16 nmi south is early in the trail, 3.5 nmi south is the middle of its final, newest leg.
+	oldest = polarPoint(200, 200, radius * 16 / 50, 180)
+	newest = polarPoint(200, 200, radius * 3.5 / 50, 180)
+	assert added(oldest) > 0, 'the whole trail is drawn, not just its newest end'
+	assert added(newest) > added(oldest), 'the newest end of a trail is brighter than its oldest'
+

@@ -32,6 +32,9 @@ an empty slot from a plane on the same bearing as the last. ``plot: radar`` of `
 	adaptive = True
 	lookout = 0
 	speed_cap = 500
+	straightness = 0
+	path_window = 1200
+	trail_points = 40
 	slots = 20
 	trigger_radius = 10
 	trigger_altitude = 0
@@ -103,6 +106,18 @@ FEEDS: Dict[str, str] = {
 #: The public feeds' radius ceiling, in nautical miles.
 RADIUS_MAX = 250
 
+#: The fields a row publishes. Anything else in a row (``hex``, ``straight``, ``eta``) is for the plugin's own use.
+PUBLISHED_FIELDS = (
+	'callsign', 'type', 'registration', 'category', 'bearing', 'distance', 'altitude', 'speed', 'climb', 'heading',
+	'straight', 'eta', 'path',
+)
+#: How long a path is remembered per aircraft (seconds; 20 minutes by default), and the least time it must span
+#: before any judgement. ``[Aircraft] path_window`` sets the first, so the trail can be as long as you like.
+PATH_WINDOW = 1200.0
+PATH_MIN_SPAN = 20.0
+#: The most points one aircraft's trail carries: the remembered path is decimated evenly to this many.
+TRAIL_POINTS = 40
+
 AIRCRAFT_KEYS: Dict[str, dict] = {
 	'aircraft.count': dict(unit='int', title='Aircraft in range'),
 	'aircraft.near': dict(unit='int', title='Aircraft overhead'),
@@ -122,6 +137,9 @@ for _n in range(1, SLOTS_MAX + 1):
 		f'aircraft.{_n}.speed': dict(unit='int', title='Ground speed (kt)'),
 		f'aircraft.{_n}.climb': dict(unit='int', title='Climb (ft/min)'),
 		f'aircraft.{_n}.heading': dict(unit='int', title='Heading (degrees)'),
+		f'aircraft.{_n}.straight': dict(unit='int', title='Path straightness (%)'),
+		f'aircraft.{_n}.path': dict(unit='str', title='Path'),
+		f'aircraft.{_n}.eta': dict(unit='int', title='Arrival (s)'),
 	})
 
 
@@ -172,6 +190,7 @@ def parseAircraft(data: dict, lat: float, lon: float, radius: float, ground: boo
 				continue
 		climb = _number(ac.get('baro_rate', ac.get('geom_rate', ac.get('vert_rate'))))
 		rows.append({
+			'hex': str(ac.get('hex') or '').strip(),
 			'callsign': str(ac.get('flight') or '').strip() or str(ac.get('r') or ac.get('hex') or '?').strip(),
 			'type': str(ac.get('t') or '').strip(),
 			'registration': str(ac.get('r') or '').strip(),
@@ -197,12 +216,14 @@ def slotValues(rows: List[Dict[str, Any]], slots: int, previous: int = 0) -> Dic
 	out: Dict[str, Any] = {'aircraft.count': len(rows)}
 	for n in range(1, max(slots, 0) + 1):
 		if n <= len(rows):
-			for field, value in rows[n - 1].items():
-				out[f'aircraft.{n}.{field}'] = value
+			for field in PUBLISHED_FIELDS:
+				out[f'aircraft.{n}.{field}'] = rows[n - 1].get(field, 0)
+			for field in ('callsign', 'type', 'registration', 'category', 'path'):
+				out[f'aircraft.{n}.{field}'] = rows[n - 1].get(field, '')
 		elif n <= previous:
 			for field in ('callsign', 'type', 'registration', 'category'):
 				out[f'aircraft.{n}.{field}'] = ''
-			for field in ('bearing', 'distance', 'altitude', 'speed', 'climb', 'heading'):
+			for field in ('bearing', 'distance', 'altitude', 'speed', 'climb', 'heading', 'straight', 'eta'):
 				out[f'aircraft.{n}.{field}'] = 0
 	return out
 
@@ -264,6 +285,80 @@ def nextInterval(rows: List[Dict[str, Any]], radius: float, idle: float, fast: f
 	return max(fast, min(idle, best))
 
 
+def toXY(bearing: float, distance: float) -> tuple[float, float]:
+	"""(east, north) in nautical miles for a bearing and a distance from you."""
+	angle = math.radians(bearing)
+	return distance * math.sin(angle), distance * math.cos(angle)
+
+
+def pathStraightness(fixes: List[tuple]) -> Optional[float]:
+	"""How straight a path is, 1.0 for a line: the direct distance over the distance actually flown.
+
+	``fixes`` are ``(time, bearing, distance)`` oldest first. None until the path spans ``PATH_MIN_SPAN`` seconds or
+	has flown anything at all, so an aircraft is kept by every caller until its path can be judged. A helicopter
+	holding a pattern scores low; a transit scores near 1.0; a parked aircraft is unjudged, not crooked.
+	"""
+	if len(fixes) < 2:
+		return None
+	span = fixes[-1][0] - fixes[0][0]
+	if span < PATH_MIN_SPAN:
+		return None
+	points = [toXY(bearing, distance) for _, bearing, distance in fixes]
+	flown = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(points, points[1:]))
+	if flown < 0.05:
+		return None
+	direct = math.hypot(points[-1][0] - points[0][0], points[-1][1] - points[0][1])
+	return max(0.0, min(1.0, direct / flown))
+
+
+def projectPath(fixes: List[tuple]) -> Optional[tuple[float, float]]:
+	"""``(heading, knots)`` read from a whole path rather than from the newest fix, or None when it is too short.
+
+	The heading and speed come from the displacement between the oldest and the newest fix, so one jittery ``track``
+	value cannot swing the answer. Pure, so a test can call it.
+	"""
+	if len(fixes) < 2:
+		return None
+	span = fixes[-1][0] - fixes[0][0]
+	if span <= 0:
+		return None
+	start, end = toXY(fixes[0][1], fixes[0][2]), toXY(fixes[-1][1], fixes[-1][2])
+	east, north = (end[0] - start[0]) / span, (end[1] - start[1]) / span
+	speed = math.hypot(east, north) * 3600.0
+	if speed < 2.0:  # parked, or hovering
+		return None
+	return math.degrees(math.atan2(east, north)) % 360.0, speed
+
+
+def decodePath(text: str) -> List[tuple[float, float, float]]:
+	"""``[(age, bearing, distance)]`` from an encoded trail, oldest first; an empty list for a missing or bad one."""
+	points = []
+	for chunk in (text or '').split(';'):
+		parts = chunk.split(':')
+		if len(parts) != 3:
+			continue
+		try:
+			points.append((float(parts[0]), float(parts[1]), float(parts[2])))
+		except ValueError:
+			continue
+	return points
+
+
+def encodePath(fixes: List[tuple], now: float, points: int = TRAIL_POINTS) -> str:
+	"""One compact trail: ``age:bearing:distance`` triples separated by ``;``, oldest first, at most ``points`` of them.
+
+	A dashboard reads the whole path from this one string, so a trail survives a reload. Evenly decimated, so a long
+	remembered path still describes its own shape.
+	"""
+	if not fixes:
+		return ''
+	step = max(1, len(fixes) // max(1, points))
+	sampled = fixes[::step]
+	if sampled[-1] is not fixes[-1]:
+		sampled = sampled + [fixes[-1]]
+	return ';'.join(f'{max(0, round(now - when))}:{bearing:.1f}:{distance:.1f}' for when, bearing, distance in sampled)
+
+
 def feedUrl(source: str, lat: float, lon: float, radius: float) -> str:
 	"""The URL to fetch for a ``[Aircraft] source``: a named public feed, or a receiver's own URL as written."""
 	template = FEEDS.get(source.strip().lower())
@@ -317,6 +412,9 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 	adaptive = True
 	lookout = 0
 	speed_cap = 500
+	straightness = 0
+	path_window = 1200
+	trail_points = 40
 	slots = 20
 	ground = False
 	trigger_radius = 10
@@ -335,6 +433,7 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 		self._lastNear: Optional[float] = None
 		self._next: Optional[float] = None
 		self._approaching = 0
+		self._paths: Dict[str, List[tuple]] = {}
 		self._failed: Optional[str] = None
 		self._scenarioKeys = set()
 		if os.environ.get(ENV_VAR, '').strip():
@@ -421,6 +520,51 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 		except ValueError:
 			return default
 
+	def _remember(self, rows: List[Dict[str, Any]], now: float) -> Dict[str, List[tuple]]:
+		"""Append this reading to each aircraft's path and forget what is older than ``path_window``. Keyed by hex."""
+		window = self._number('path_window', PATH_WINDOW) or PATH_WINDOW
+		seen: Dict[str, List[tuple]] = {}
+		for row in rows:
+			key = row.get('hex') or row.get('callsign') or '?'
+			points = self._paths.setdefault(key, [])
+			points.append((now, row['bearing'], row['distance']))
+			while points and now - points[0][0] > window:
+				points.pop(0)
+			seen[key] = points
+		for key in [key for key, points in self._paths.items() if not points or now - points[-1][0] > window * 2]:
+			self._paths.pop(key, None)
+		return seen
+
+	def _judged(self, rows: List[Dict[str, Any]], now: float) -> List[Dict[str, Any]]:
+		"""Rows with the path read out of them: heading and speed from the trajectory, its straightness, and the time
+		until it reaches ``radius``. Aircraft whose path bends more than ``straightness`` (percent) are dropped, once
+		their path is long enough to judge."""
+		paths = self._remember(rows, now)
+		floor = self._number('straightness', 0) / 100.0
+		judged = []
+		for row in rows:
+			key = row.get('hex') or row.get('callsign') or '?'
+			points = paths.get(key, [])
+			row = dict(row)
+			projection = projectPath(points)
+			if projection is not None:
+				row['heading'], row['speed'] = round(projection[0]), round(projection[1])
+			straight = pathStraightness(points)
+			row['straight'] = 0 if straight is None else round(straight * 100)
+			row['path'] = encodePath(points, now, int(self._number('trail_points', TRAIL_POINTS)))
+			if floor > 0 and straight is not None and straight < floor:
+				continue  # a path that bends this much is local traffic, not a transit
+			closing = closingSpeed(row)
+			if row['distance'] <= self.radius:
+				row['eta'] = 0
+			elif closing > 0.5:
+				row['eta'] = round((row['distance'] - self.radius) / closing * 3600)
+			else:
+				row['eta'] = -1
+			judged.append(row)
+		judged.sort(key=lambda row: row['distance'])
+		return judged
+
 	def publishRows(self, rows: Optional[List[Dict[str, Any]]]) -> None:
 		"""Publish a reading. ``None`` is a failed fetch: the slots stay as they were and only ``active`` is brought up to date."""
 		now = time.monotonic()
@@ -446,11 +590,12 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 		data = await asyncio.to_thread(fetch, url)
 		seen = parseAircraft(data, lat, lon, watch, self.ground,
 			self._number('max_altitude', 0), self._get('military', 'True').lower() in ('1', 'true', 'yes', 'on'))
+		rows = self._judged(seen, time.monotonic())
 		# The watch ring decides the cadence; only what is inside `radius` is published, so the radar stays yours.
 		if self.adaptive:
-			self._next = nextInterval(seen, self.radius, self.interval, self.fastInterval)
-		self._approaching = sum(1 for row in seen if row['distance'] > self.radius)
-		self.publishRows([row for row in seen if row['distance'] <= self.radius])
+			self._next = nextInterval(rows, self.radius, self.interval, self.fastInterval)
+		self._approaching = sum(1 for row in rows if row['distance'] > self.radius)
+		self.publishRows([row for row in rows if row['distance'] <= self.radius])
 		if self._failed:
 			log.info('Aircraft: the feed is back')
 			self._failed = None

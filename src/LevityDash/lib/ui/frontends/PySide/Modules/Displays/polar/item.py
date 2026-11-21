@@ -42,6 +42,7 @@
   sweep: true                 # a sweep line turning once every 8 seconds
   glyphs: true                # a silhouette of each aircraft's kind, turned to its heading; false for dots
   glyph-scale: 1              # a multiplier on the silhouette's size, so the traffic reads from across a room
+  trail: true                 # draw `prefix.N.path` as a line behind each blip, fading with age
 ```
 
 Click a blip to open its details (type, category, altitude, speed, heading, distance, bearing), and click it again
@@ -92,7 +93,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.geometry import (
 from LevityDash.lib.utils.shared import now as localNow
 
 #: What a radar reads from each slot, and whether it is text.
-_RADAR_FIELDS = {'callsign': True, 'type': True, 'category': True, 'bearing': False, 'distance': False, 'altitude': False, 'heading': False, 'speed': False}
+_RADAR_FIELDS = {'callsign': True, 'type': True, 'category': True, 'bearing': False, 'distance': False, 'altitude': False, 'heading': False, 'speed': False, 'path': True}
 _SWEEP_SECONDS = 8.0
 
 __all__ = ['Polar']
@@ -164,6 +165,7 @@ class Polar(Panel, tag='polar'):
 		self._levels = True
 		self._glyphs = True
 		self._glyphScale = 1.0
+		self._trail = True
 		self._selected: Optional[int] = None
 		self._overlay = None
 		self._sweepTimer = None
@@ -476,6 +478,14 @@ class Polar(Panel, tag='polar'):
 	def glyphScale(self, value) -> float:
 		return max(0.1, min(6.0, float(value)))
 
+	@StateProperty(key='trail', default=True, allowNone=False, after=refresh)
+	def trail(self) -> bool:
+		return self._trail
+
+	@trail.setter
+	def trail(self, value: bool):
+		self._trail = bool(value)
+
 	@StateProperty(key='altitudes', default=True, allowNone=False, after=refresh)
 	def altitudes(self) -> bool:
 		return self._levels
@@ -745,6 +755,7 @@ class Polar(Panel, tag='polar'):
 		radar.drawRadar(
 			painter, look, rect, blips, top, self._rings, self._compass, colorFor, self._labels, self._levels,
 			sweep, legend=self._legend, glyphs=self._glyphs, glyphScale=self._glyphScale,
+			paths=self.radarPaths() if self._trail else None,
 		)
 		selected = next((blip for blip in blips if blip.slot == self._selected), None)
 		if selected is None:
@@ -755,6 +766,22 @@ class Polar(Panel, tag='polar'):
 	def radarBlips(self) -> list:
 		"""The blips a click can land on, in the order the panel draws them."""
 		return self._blips()
+
+	def radarPaths(self) -> list:
+		"""Each filled slot's trail, from the ``path`` string the plugin publishes: ``[(age, bearing, distance)]``."""
+		try:
+			from LevityDash.lib.plugins.builtin.Aircraft import decodePath
+		except Exception:  # noqa: BLE001 - no Aircraft plugin, no trails; a radar over other keys still draws
+			return []
+		paths = []
+		for n in range(1, self._slots + 1):
+			text = self._radarValues.get(('path', n))
+			if not text:
+				continue
+			points = decodePath(str(text))
+			if len(points) > 1:
+				paths.append(points)
+		return paths
 
 	def radarTop(self) -> float:
 		"""The distance of the rim, in the slots' own unit."""

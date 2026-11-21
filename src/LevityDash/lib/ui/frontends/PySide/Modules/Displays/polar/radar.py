@@ -34,6 +34,27 @@ class Blip:
 	slot: int = 0  # which slot it came from, so a click can read the rest of that slot
 
 
+def _drawPaths(painter: QPainter, look: Look, cx: float, cy: float, radius: float, top: float,
+		paths: Sequence[Sequence[tuple]]) -> None:
+	"""A line through each trail, oldest to newest, fading out with age. Points beyond the rim are left off."""
+	for points in paths:
+		if len(points) < 2:
+			continue
+		oldest = max((age for age, _, _ in points), default=0.0) or 1.0
+		painter.setPen(QPen(_alpha(look.accent, 0.1), max(1.0, radius * 0.006)))
+		last = None
+		for age, bearing, distance in points:
+			if distance > top:
+				last = None
+				continue
+			point = QPointF(*polarPoint(cx, cy, radius * min(distance / top, 1.0), bearing))
+			if last is not None:
+				fade = 1.0 - min(1.0, max(0.0, age / oldest))  # newest is 1, oldest is 0
+				painter.setPen(QPen(_alpha(look.accent, 0.12 + 0.55 * fade), max(1.0, radius * 0.006)))
+				painter.drawLine(last, point)
+			last = point
+
+
 def hitBlip(rect: QRectF, blips: Sequence[Blip], top: float, pos: QPointF, slack: float = 12.0) -> Optional[Blip]:
 	"""The blip under ``pos`` in the same coordinates ``drawRadar`` paints, or None.
 
@@ -115,12 +136,14 @@ def drawRadar(
 	painter: QPainter, look: Look, rect: QRectF, blips: Sequence[Blip], top: float, rings: int, compass: int,
 	colorFor: Callable[[float], QColor], labels: int, altitudes: bool = True, sweep: Optional[float] = None,
 	unit: str = 'nmi', legend: bool = True, glyphs: bool = True, glyphScale: float = 1.0,
+	paths: Optional[Sequence[Sequence[tuple]]] = None,
 ) -> None:
 	"""The disc, rings, spokes and compass, then the blips nearest first, the nearest ``labels`` named.
 
 	``glyphs`` draws each blip as a silhouette of its kind (`glyphs.classify`) turned to its heading; off, a dot with
 	a tail. ``glyphScale`` multiplies the silhouette, so a dashboard can ask for larger traffic than the radius alone
-	gives. ``top`` is the distance of the rim. ``sweep`` is the sweep line's bearing in degrees, or None for no sweep: a
+	gives. ``paths`` are the trails, each ``(age, bearing, distance)`` oldest first, painted under the blips and fading
+	with age. ``top`` is the distance of the rim. ``sweep`` is the sweep line's bearing in degrees, or None for no sweep: a
 	wedge of light that trails it and brightens the blips it has just passed."""
 	fontPx = max(8.0, min(rect.width(), rect.height()) / 28)
 	cx, cy, radius = plotCircle(rect, fontPx * 2.2)
@@ -156,6 +179,9 @@ def drawRadar(
 		painter.drawEllipse(QPointF(cx, cy), radius, radius)
 		painter.setPen(QPen(_alpha(look.accent, 0.9), max(1.0, radius * 0.005)))
 		painter.drawLine(QPointF(cx, cy), QPointF(*polarPoint(cx, cy, radius, sweep)))
+
+	if paths:
+		_drawPaths(painter, look, cx, cy, radius, top, paths)
 
 	# Blips, farthest first so the near ones sit on top. A blip beyond the rim is not drawn.
 	drawn = [b for b in sorted(blips, key=lambda b: -b.distance) if b.distance <= top]
