@@ -54,7 +54,12 @@ def test_slots_fill_nearest_first_and_blank_the_ones_that_emptied():
 
 def test_every_published_key_is_declared():
 	rows = parseAircraft({'ac': [plane(40.1, -75.0)] * SLOTS_MAX}, *HOME, radius=50)
-	assert set(slotValues(rows, SLOTS_MAX)) <= set(AIRCRAFT_KEYS)
+	judged = [dict(row, straight=92, eta=47, path='25:69.6:0.2;0:50.8:0.7') for row in rows]
+	published = slotValues(judged, SLOTS_MAX)
+	assert set(published) <= set(AIRCRAFT_KEYS), set(published) - set(AIRCRAFT_KEYS)
+	assert published['aircraft.1.path'] == '25:69.6:0.2;0:50.8:0.7' and published['aircraft.1.eta'] == 47
+	# An internal field must never leak into a published key: the schema would not know it.
+	assert not any(key.endswith('.hex') for key in published)
 
 
 def test_feed_urls():
