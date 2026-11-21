@@ -1762,6 +1762,7 @@ def thread_safe(func):
 
 
 _appNapActivity = None
+_NS_ACTIVITY_LATENCY_CRITICAL = 0xFF00000000  # NSActivityLatencyCritical (NSProcessInfo.h); not every pyobjc exports it
 
 
 def preventAppNap() -> None:
@@ -1794,8 +1795,10 @@ def preventAppNap() -> None:
 		# transitively via bleak's macOS CoreBluetooth backend) - degrade to
 		# a no-op rather than adding a hard new dependency for this.
 		return
+	# LatencyCritical asks macOS not to coalesce this process's timers, which it otherwise does even
+	# for a frontmost app (an 8 ms Qt timer fired every ~44 ms on an M2 Pro): animations are timer driven.
 	_appNapActivity = NSProcessInfo.processInfo().beginActivityWithOptions_reason_(
-		NSActivityUserInitiated | NSActivityIdleSystemSleepDisabled,
+		NSActivityUserInitiated | NSActivityIdleSystemSleepDisabled | _NS_ACTIVITY_LATENCY_CRITICAL,
 		'LevityDash must stay fully responsive as an always-on ambient display',
 	)
 
