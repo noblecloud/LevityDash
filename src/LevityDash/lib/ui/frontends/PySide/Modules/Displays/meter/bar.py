@@ -38,6 +38,7 @@ from LevityDash.lib.plugins.expressions import ExpressionError  # noqa: F401 - r
 from LevityDash.lib.stateful import Binding, StateProperty
 from LevityDash.lib.ui import Color, Gradient, UILogger
 from LevityDash.lib.ui.bound_number import BoundNumber, isBound
+from LevityDash.lib.ui.frontends.PySide.utils import cacheItem
 from LevityDash.lib.ui.Geometry import DimensionType, parseWidth, size_px
 from LevityDash.lib.ui.fonts import defaultFont
 from LevityDash.lib.ui.glow import Glow, GlowMixin, paintGlow, resolveGlow
@@ -127,6 +128,8 @@ class BarCanvas(QGraphicsItem):
 		self._bar = bar
 		self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemHasNoContents, False)
 		self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+		# Every change to a bar goes through `Bar._redraw` -> `update()`, which drops the cached pixmap.
+		cacheItem(self)
 
 	def boundingRect(self) -> QRectF:
 		return self._bar.canvasRect()
@@ -262,7 +265,10 @@ class Bar(GlowMixin, Meter):
 		glow = self.glow
 		if glow is not None:
 			rect = glow.pad(rect, self.across * 0.3, filled=True)
-		return rect.adjusted(-2, -2, 2, 2)
+		# Markers, the pointer and the end tick labels are drawn past the box; a cached pixmap
+		# (`BarCanvas`) is cut off at this rect, so it has to hold them.
+		margin = max(8.0, self.across * 0.6)
+		return rect.adjusted(-margin, -margin, margin, margin)
 
 	# -- state: shape --------------------------------------------------------------------------------
 

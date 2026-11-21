@@ -44,7 +44,7 @@ from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Label import NonInterac
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Text import Text
 from LevityDash.lib.ui.frontends.PySide.Modules.Handles import Handle
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import SizeGroup
-from LevityDash.lib.ui.frontends.PySide.utils import DisplayType, addCrosshair, DebugPaint, SoftShadow, outline_path, \
+from LevityDash.lib.ui.frontends.PySide.utils import cacheItem, DisplayType, addCrosshair, DebugPaint, SoftShadow, outline_path, \
 	modifyTransformValues, rect_to_shape, addPath
 from .meter import GaugeRange, Meter
 from .elements import (
@@ -74,6 +74,10 @@ class GaugeArc(GlowMixin, StatefulGaugePathItem):
 	#: The arc this item strokes, in the item's own coordinates. Rebuilt by `draw`,
 	#: and built on demand before that, since a tick can be drawn first.
 	_track: Optional[ArcTrack] = None
+
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		cacheItem(self)
 
 	@property
 	def track(self) -> ArcTrack:
