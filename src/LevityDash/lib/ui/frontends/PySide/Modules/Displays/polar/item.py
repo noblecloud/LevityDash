@@ -84,6 +84,7 @@ from LevityDash.lib.log import LevityPluginLog
 from LevityDash.lib.plugins.expressions import Expression, ExpressionError
 from LevityDash.lib.stateful import StateProperty
 from LevityDash.lib.ui.colors import Color, Gradient, theme
+from LevityDash.lib.ui.frontends.PySide.utils import cacheItem
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar import draw, radar
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.feed import Series, openCurrent, openFeed, openValue
@@ -179,6 +180,9 @@ class Polar(Panel, tag='polar'):
 		self._clock = QTimer(interval=60_000)
 		self._clock.timeout.connect(self.update)
 		self._clock.start()
+		# Every change calls `update()`, which drops the cached pixmap; between changes a repaint caused by
+		# another item costs a blit, not the whole plot again.
+		cacheItem(self)
 		self._connect()
 
 	@property

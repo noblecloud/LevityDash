@@ -23,7 +23,9 @@ seam. A band needs at least `visible + 1` items to scroll; with fewer it shows t
 It is made to be cheap. The layout is worked out once, as shares of the band, and never again, so a resize costs
 what it costs any group. A move only changes each item's own translation, with no geometry update, and in continuous
 mode each item is drawn once into a pixmap that is then just moved (`cache: false` turns that off, for an item with
-something that changes every frame). A step band does nothing at all between moves.
+something that changes every frame). A step band draws every item it shows into one picture each just before a move
+(`snapshot.py`) and slides the pictures, so a frame of the move is a few blits rather than a repaint of every item
+in every card; the real items come back when the move ends. Between moves it does nothing at all.
 
 Nothing here raises. A band that is not on screen does not tick.
 """
@@ -39,6 +41,7 @@ from LevityDash.lib.stateful import DefaultGroup, StateProperty
 from LevityDash.lib.ui import UILogger as guiLog
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.condition import parseSeconds
+from LevityDash.lib.ui.frontends.PySide.snapshot import Snapshot, renderSubtree
 from LevityDash.lib.ui.frontends.PySide.utils import itemLoader
 
 __all__ = ["Band"]
@@ -87,6 +90,7 @@ class Band(Panel, tag='band'):
 		self._frameTimer = QTimer()
 		self._frameTimer.timeout.connect(self._frame)
 		self._animation: Optional[QVariantAnimation] = None
+		self._snapshots: dict = {}
 		super().__init__(*args, **kwargs)
 		self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape, True)
 
@@ -162,10 +166,14 @@ class Band(Panel, tag='band'):
 		for index, child in enumerate(children):
 			# Each item was laid out at its place in the file; a hidden one before it leaves a gap to close.
 			delta = round((where[index] - every.index(child)) * stride, 2)
+			transform = QTransform.fromTranslate(0.0, delta) if self.vertical else QTransform.fromTranslate(delta, 0.0)
+			if (snapshot := self._snapshots.get(child)) is not None:
+				snapshot.setTransform(transform)  # mid-step: the picture moves, the real item waits for `_thaw`
+				continue
 			if self._applied.get(child) == delta:
 				continue
 			self._applied[child] = delta
-			child.setTransform(QTransform.fromTranslate(0.0, delta) if self.vertical else QTransform.fromTranslate(delta, 0.0))
+			child.setTransform(transform)
 
 	def afterSurface(self):
 		"""The band was sized or moved: translations are in pixels, so work them out again for the new length."""
@@ -173,6 +181,7 @@ class Band(Panel, tag='band'):
 		length = self._length()
 		if length != getattr(self, '_placedLength', None):
 			self._placedLength = length
+			self._thaw()  # a picture drawn at the old size would slide on at the wrong size
 			self._applied.clear()
 			if self.running:
 				self.place()
@@ -202,6 +211,7 @@ class Band(Panel, tag='band'):
 		if self._animation is not None:
 			self._animation.stop()
 			self._animation = None
+		self._thaw()
 
 	def _frame(self) -> None:
 		if not self._wanted():
@@ -233,14 +243,48 @@ class Band(Panel, tag='band'):
 			animation.valueChanged.connect(lambda value: self.place(float(value) % count))
 			animation.finished.connect(lambda: self._arrive(end % count))
 			self._animation = animation
+			self._freeze()
 			animation.start()
 		except Exception:
 			log.exception('band could not step; stopping it')
 
 	def _arrive(self, position: float) -> None:
 		self._animation = None
+		self._thaw()
 		self.place(position)
 		self._dwellTimer.start(int(max(self._dwell, 0.05) * 1000))
+
+	def _deviceScale(self) -> float:
+		"""Device pixels per scene unit on the sharpest view showing this band."""
+		scene = self.scene()
+		views = scene.views() if scene is not None else []
+		return max((view.devicePixelRatioF() * view.transform().m11() for view in views), default=1.0) or 1.0
+
+	def _freeze(self) -> None:
+		"""Before a step: draw each item once and slide the pictures, so a frame is a few blits instead of
+		repainting every item in every card. An item that cannot be drawn this way (it has an effect) moves live."""
+		self._thaw()
+		if not self._cache:
+			return
+		scale = self._deviceScale()
+		for child in self.shown:
+			try:
+				drawn = renderSubtree(child, scale)
+			except Exception:
+				log.exception('band could not draw an item ahead of a step; moving it live')
+				drawn = None
+			if drawn is not None:
+				self._snapshots[child] = Snapshot(child, *drawn)
+
+	def _thaw(self) -> None:
+		"""Put the real items back where the pictures were."""
+		if not self._snapshots:
+			return
+		snapshots, self._snapshots = self._snapshots, {}
+		for child, snapshot in snapshots.items():
+			child.setTransform(snapshot.transform())
+			self._applied.pop(child, None)
+			snapshot.release()
 
 	def _cacheChildren(self, on: bool) -> None:
 		mode = QGraphicsItem.CacheMode.DeviceCoordinateCache if on else QGraphicsItem.CacheMode.NoCache
@@ -476,7 +520,8 @@ class Band(Panel, tag='band'):
 
 	@StateProperty(default=True, allowNone=False, sortOrder=69)
 	def cache(self) -> bool:
-		"""Continuous mode: draw each item once and move the picture. Turn it off for an item that changes every frame."""
+		"""Draw each item once and move the picture: all the time in continuous mode, during each move in step mode.
+		Turn it off for an item that changes every frame."""
 		return self._cache
 
 	@cache.setter

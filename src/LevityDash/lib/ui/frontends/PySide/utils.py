@@ -28,6 +28,33 @@ from LevityDash.lib.utils import (
 )
 
 
+def cacheItem(item: QGraphicsItem) -> None:
+	"""Paint `item` to a pixmap and redraw from that until it is updated.
+
+	For an item whose `paint()` costs real Python (a bar, a dial, a polar plot): a repaint caused by
+	something else on the scene (another item animating, a graph scrolling past) then costs a pixmap blit
+	instead of running its `paint()` again. `QGraphicsItem.update()` drops the pixmap, so an item that
+	calls it on every change stays correct; one that paints from state it never announces would go stale.
+	`DeviceCoordinateCache` keeps the pixmap at device resolution, so a scaled view stays sharp.
+	`[QtOptions] itemCache = false` (or `LEVITY_ITEM_CACHE=0`) turns it off for a comparison.
+	"""
+	if _itemCacheOn():
+		item.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
+
+
+_itemCache: Optional[bool] = None
+
+
+def _itemCacheOn() -> bool:
+	global _itemCache
+	if _itemCache is None:
+		from LevityDash.lib.config import userConfig
+		_itemCache = bool(userConfig.getOrSet('QtOptions', 'itemCache', True, userConfig.getboolean))
+		if (override := environ.get('LEVITY_ITEM_CACHE')) is not None:
+			_itemCache = override.strip().lower() not in ('0', 'false', 'no', 'off')
+	return _itemCache
+
+
 @contextmanager
 def painter_restore(painter: QPainter):
 	painter.save()
