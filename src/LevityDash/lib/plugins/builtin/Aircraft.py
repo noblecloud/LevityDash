@@ -51,7 +51,9 @@ or by default the distance a ``speed_cap`` knot aircraft covers in one idle inte
 ``gap / closing speed``, where the closing speed is its ground speed times the cosine of the angle between its track
 and its bearing, and the next fetch is a quarter of that time away, clamped between ``fast_interval`` and
 ``interval``. A jet 6 miles out closing head-on is polled in seconds; a plane crossing your view changes nothing.
-``aircraft.nextCheck`` publishes the wait it chose, in seconds. ``adaptive = False`` polls at ``interval`` always.
+``aircraft.nextCheck`` publishes the wait it chose, in seconds, and ``aircraft.approaching`` how many are in the
+watch ring but outside ``radius``, so an empty radar can still say that something is on its way. ``adaptive = False``
+polls at ``interval`` always.
 
 ``source`` is one of the public community feeds, ``adsb.fi`` (the default), ``adsb.lol`` or ``airplanes.live``, or
 the URL of your own receiver's ``aircraft.json`` (dump1090, readsb, tar1090: ``http://pi.local:8080/data/aircraft.json``).
@@ -106,6 +108,7 @@ AIRCRAFT_KEYS: Dict[str, dict] = {
 	'aircraft.near': dict(unit='int', title='Aircraft overhead'),
 	'aircraft.active': dict(unit='int', title='Aircraft overhead (hold)'),
 	'aircraft.nextCheck': dict(unit='int', title='Next check (s)'),
+	'aircraft.approaching': dict(unit='int', title='Aircraft inbound (outside range)'),
 }
 for _n in range(1, SLOTS_MAX + 1):
 	AIRCRAFT_KEYS.update({
@@ -331,6 +334,7 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 		self._previous = 0
 		self._lastNear: Optional[float] = None
 		self._next: Optional[float] = None
+		self._approaching = 0
 		self._failed: Optional[str] = None
 		self._scenarioKeys = set()
 		if os.environ.get(ENV_VAR, '').strip():
@@ -425,6 +429,7 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 		values = {'aircraft.near': near, 'aircraft.active': active} if rows is None else {
 			**slotValues(rows, self.slots, self._previous), 'aircraft.near': near, 'aircraft.active': active}
 		values['aircraft.nextCheck'] = round(self._next if self._next is not None else self.interval)
+		values['aircraft.approaching'] = self._approaching
 		if rows is not None:
 			self._previous = min(len(rows), self.slots)
 		realtime = {'time': int(datetime.now().timestamp())}
@@ -444,6 +449,7 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 		# The watch ring decides the cadence; only what is inside `radius` is published, so the radar stays yours.
 		if self.adaptive:
 			self._next = nextInterval(seen, self.radius, self.interval, self.fastInterval)
+		self._approaching = sum(1 for row in seen if row['distance'] > self.radius)
 		self.publishRows([row for row in seen if row['distance'] <= self.radius])
 		if self._failed:
 			log.info('Aircraft: the feed is back')
