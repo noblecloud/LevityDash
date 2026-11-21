@@ -231,7 +231,7 @@ class Polar(Panel, tag='polar'):
 	def _radarChanged(self, field: str, slot, value):
 		if value is None or type(value).__name__ == 'UnsetType':
 			return
-		if field in ('callsign', 'type', 'category'):
+		if _RADAR_FIELDS.get(field, False):  # the field table says which slots hold text, so a new one cannot be missed
 			self._radarValues[(field, slot)] = str(value).strip()
 		else:
 			number = _plain(value)

@@ -232,3 +232,46 @@ def test_a_trail_is_painted_and_fades_with_age():
 	assert added(oldest) > 0, 'the whole trail is drawn, not just its newest end'
 	assert added(newest) > added(oldest), 'the newest end of a trail is brighter than its oldest'
 
+
+
+class _FakePanel:
+	"""The bits of Polar that the field handling and the trail reader touch."""
+
+	def __init__(self, slots=3):
+		self._radarValues = {}
+		self._slots = slots
+		self._overlay = None
+		self.updates = 0
+
+	def update(self):
+		self.updates += 1
+
+
+def test_every_text_field_the_table_names_is_kept_as_text():
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.item import Polar, _RADAR_FIELDS
+	panel = _FakePanel()
+	for field, isText in _RADAR_FIELDS.items():
+		panel._radarValues.clear()
+		Polar._radarChanged(panel, field, 1, '12.5' if isText else 12.5)
+		stored = panel._radarValues.get((field, 1))
+		if isText:
+			assert stored == '12.5', f'{field} is text in the table but was not kept: {stored!r}'
+		else:
+			assert stored == 12.5, f'{field} is numeric in the table but was not kept: {stored!r}'
+	# The trail is the case that was dropped: a string handed to the numeric branch becomes None and vanishes.
+	panel._radarValues.clear()
+	Polar._radarChanged(panel, 'path', 1, '30:10.0:4.0;0:20.0:3.0')
+	assert panel._radarValues[('path', 1)] == '30:10.0:4.0;0:20.0:3.0'
+
+
+def test_the_radar_reads_its_trails_out_of_the_published_paths():
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.item import Polar
+	panel = _FakePanel(slots=3)
+	panel._radarValues.update({
+		('path', 1): '30:10.0:4.0;0:20.0:3.0',
+		('path', 2): '',            # a slot with no history
+		('path', 3): 'nonsense',    # a trail that cannot be read
+	})
+	assert Polar.radarPaths(panel) == [[(30.0, 10.0, 4.0), (0.0, 20.0, 3.0)]]
+	panel._radarValues.clear()
+	assert Polar.radarPaths(panel) == []
