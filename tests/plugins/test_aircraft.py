@@ -1,7 +1,8 @@
 import pytest
 
 from LevityDash.lib.plugins.builtin.Aircraft import (
-	AIRCRAFT_KEYS, SLOTS_MAX, Aircraft, bearingDistance, feedUrl, parseAircraft, retryDelay, slotValues,
+	AIRCRAFT_KEYS, SLOTS_MAX, Aircraft, bearingDistance, closingSpeed, feedUrl, lookoutRadius, nextInterval,
+	parseAircraft, retryDelay, slotValues,
 )
 
 HOME = (40.0, -75.0)
@@ -83,6 +84,41 @@ def test_a_capped_feed_waits_for_its_own_reset():
 	class Soon(Exception):
 		headers = {'Retry-After': '2'}
 	assert retryDelay(Soon(), 10) == 10
+
+
+def _traffic(distance, bearing, heading, speed):
+	return {'distance': distance, 'bearing': bearing, 'heading': heading, 'speed': speed}
+
+
+def test_the_poll_rate_follows_what_is_closing_on_you():
+	head_on = _traffic(8.0, 90, 270, 120)   # due east of you, flying west, straight at you
+	crossing = _traffic(8.0, 90, 0, 120)    # northbound across your view
+	away = _traffic(8.0, 90, 90, 120)       # eastbound, gone
+	assert closingSpeed(head_on) == pytest.approx(120)
+	assert closingSpeed(crossing) == pytest.approx(0, abs=1e-9)
+	assert closingSpeed(away) == pytest.approx(-120)
+
+	radius, idle, fast = 2.5, 120.0, 5.0
+	# 5.5 nmi left at 120 kt is 165 s of flying; polled a quarter of the way there is 41 s.
+	assert nextInterval([head_on], radius, idle, fast) == pytest.approx(5.5 / 120 * 3600 / 4)
+	assert nextInterval([head_on], 2.5, 30.0, fast) == 30.0, 'never slower than the idle interval'
+	assert nextInterval([crossing], radius, idle, fast) == idle
+	assert nextInterval([away], radius, idle, fast) == idle
+	assert nextInterval([], radius, idle, fast) == idle
+	assert nextInterval([_traffic(1.0, 0, 0, 100)], radius, idle, fast) == fast  # already overhead: as often as allowed
+
+
+def test_the_wait_stays_between_the_fast_and_idle_intervals():
+	assert nextInterval([_traffic(3.0, 90, 270, 480)], 2.5, 30.0, 5.0) == 5.0    # a quarter of 3.75 s is under the floor
+	assert nextInterval([_traffic(9.0, 90, 270, 60)], 2.5, 30.0, 5.0) == 30.0     # 390 s away: no faster than idle
+	assert nextInterval([_traffic(2.0, 90, 270, 120)], 2.5, 30.0, 5.0) == 5.0     # inside the radius
+
+
+def test_the_lookout_ring_grows_with_the_idle_interval():
+	assert lookoutRadius(2.2, 30) == pytest.approx(2.2 + 500 * 30 / 3600)
+	assert lookoutRadius(2.2, 60) > lookoutRadius(2.2, 30), 'a slower idle poll must watch further out'
+	assert lookoutRadius(240, 3600) == 250, 'the public feeds cap the ring at 250 nmi'
+	assert lookoutRadius(2.2, 0) == 2.2, 'a zero idle interval watches no further than the radius'
 
 
 def test_overhead_counts_inside_the_radius_and_under_the_ceiling():

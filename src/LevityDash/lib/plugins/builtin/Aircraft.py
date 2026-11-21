@@ -27,7 +27,11 @@ an empty slot from a plane on the same bearing as the last. ``plot: radar`` of `
 	[Aircraft]
 	source = adsb.fi
 	radius = 50
-	interval = 10
+	interval = 60
+	fast_interval = 5
+	adaptive = True
+	lookout = 0
+	speed_cap = 500
 	slots = 20
 	trigger_radius = 10
 	trigger_altitude = 0
@@ -39,6 +43,15 @@ an empty slot from a plane on the same bearing as the last. ``plot: radar`` of `
 ``aircraft.active``, ``trigger_altitude`` a ceiling in feet (0 for none) and ``hold`` the seconds ``active`` stays 1
 after the last plane leaves. ``max_altitude`` (feet, 0 for none) leaves out aircraft above it, so high airliners do
 not show; ``military = True`` keeps military aircraft (ADS-B ``dbFlags``) at any altitude.
+
+**The poll rate follows what is coming.** ``interval`` is the longest wait, the idle cadence, and ``fast_interval``
+the shortest, used while a plane is inside ``radius``. Each fetch reads a wider ring than ``radius`` — ``lookout``,
+or by default the distance a ``speed_cap`` knot aircraft covers in one idle interval (500 knots for 60 seconds is
+8.3 miles beyond the radius), so nothing can cross in between two polls. Anything in that ring is timed by
+``gap / closing speed``, where the closing speed is its ground speed times the cosine of the angle between its track
+and its bearing, and the next fetch is a quarter of that time away, clamped between ``fast_interval`` and
+``interval``. A jet 6 miles out closing head-on is polled in seconds; a plane crossing your view changes nothing.
+``aircraft.nextCheck`` publishes the wait it chose, in seconds. ``adaptive = False`` polls at ``interval`` always.
 
 ``source`` is one of the public community feeds, ``adsb.fi`` (the default), ``adsb.lol`` or ``airplanes.live``, or
 the URL of your own receiver's ``aircraft.json`` (dump1090, readsb, tar1090: ``http://pi.local:8080/data/aircraft.json``).
@@ -92,6 +105,7 @@ AIRCRAFT_KEYS: Dict[str, dict] = {
 	'aircraft.count': dict(unit='int', title='Aircraft in range'),
 	'aircraft.near': dict(unit='int', title='Aircraft overhead'),
 	'aircraft.active': dict(unit='int', title='Aircraft overhead (hold)'),
+	'aircraft.nextCheck': dict(unit='int', title='Next check (s)'),
 }
 for _n in range(1, SLOTS_MAX + 1):
 	AIRCRAFT_KEYS.update({
@@ -204,6 +218,49 @@ def holdActive(near: int, now: float, lastNear: Optional[float], hold: float) ->
 	return 0, lastNear
 
 
+def closingSpeed(row: Dict[str, Any]) -> float:
+	"""Knots toward you: ground speed times the cosine of the angle between its track and its bearing, negated.
+
+	The outgoing radial component is ``speed * cos(heading - bearing)``, so a plane flying away closes at a negative
+	rate and one pointed straight at you closes at its whole ground speed. A plane crossing your view closes at zero.
+	"""
+	speed = _number(row.get('speed')) or 0.0
+	angle = math.radians((_number(row.get('heading')) or 0.0) - (_number(row.get('bearing')) or 0.0))
+	return -speed * math.cos(angle)
+
+
+def lookoutRadius(radius: float, idle: float, speedCap: float = 500.0) -> float:
+	"""How far out to watch so nothing can cross ``radius`` unseen between two polls at ``idle`` seconds. Pure.
+
+	It is the distance a ``speedCap`` aircraft covers in one idle interval: 500 knots is about 0.139 nautical miles a
+	second, so a 60 second idle poll watches 8.3 miles further out. The feed's own ceiling wins when it is closer.
+	"""
+	return min(RADIUS_MAX, max(radius, radius + speedCap * idle / 3600.0))
+
+
+def nextInterval(rows: List[Dict[str, Any]], radius: float, idle: float, fast: float, factor: float = 4.0) -> float:
+	"""Seconds to wait before the next fetch, from what is heading your way. Pure.
+
+	Anything inside ``radius`` gets the fastest cadence there is. Anything outside is timed by the distance it still
+	has to cover at its closing speed and polled ``factor`` times before it arrives, so a jet 6 miles out and a
+	trainer 6 miles out are polled in proportion to when each will actually be overhead. Nothing closing on you gets
+	the idle interval. Clamped between ``fast`` and ``idle``.
+	"""
+	fast, idle = max(1.0, fast), max(1.0, idle)
+	if idle < fast:
+		fast, idle = idle, fast
+	best = idle
+	for row in rows:
+		gap = row['distance'] - radius
+		if gap <= 0:
+			return fast
+		approach = closingSpeed(row)
+		if approach < 1.0:  # flying across, or away
+			continue
+		best = min(best, gap / approach * 3600.0 / max(1.0, factor))
+	return max(fast, min(idle, best))
+
+
 def feedUrl(source: str, lat: float, lon: float, radius: float) -> str:
 	"""The URL to fetch for a ``[Aircraft] source``: a named public feed, or a receiver's own URL as written."""
 	template = FEEDS.get(source.strip().lower())
@@ -252,7 +309,11 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 	[Aircraft]
 	source = adsb.fi
 	radius = 50
-	interval = 10
+	interval = 60
+	fast_interval = 5
+	adaptive = True
+	lookout = 0
+	speed_cap = 500
 	slots = 20
 	ground = False
 	trigger_radius = 10
@@ -269,6 +330,7 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 		super().__init__()
 		self._previous = 0
 		self._lastNear: Optional[float] = None
+		self._next: Optional[float] = None
 		self._failed: Optional[str] = None
 		self._scenarioKeys = set()
 		if os.environ.get(ENV_VAR, '').strip():
@@ -303,11 +365,40 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 
 	@property
 	def interval(self) -> float:
+		"""The longest wait between fetches: the idle cadence when nothing is heading in."""
 		try:
-			value = float(self._get('interval', '10'))
+			value = float(self._get('interval', '60'))
 		except ValueError:
-			value = 10.0
+			value = 60.0
 		return max(1.0 if self.source.lower().startswith('http') else 5.0, value)
+
+	@property
+	def fastInterval(self) -> float:
+		"""The shortest wait between fetches, used while something is inside ``radius``."""
+		floor = 1.0 if self.source.lower().startswith('http') else 5.0
+		try:
+			value = float(self._get('fast_interval', '5'))
+		except ValueError:
+			value = 5.0
+		return max(floor, min(self.interval, value))
+
+	@property
+	def adaptive(self) -> bool:
+		return self._get('adaptive', 'True').lower() in ('1', 'true', 'yes', 'on')
+
+	@property
+	def speedCap(self) -> float:
+		"""The fastest ground speed a poll has to plan for, in knots."""
+		return self._number('speed_cap', 500) or 500.0
+
+	@property
+	def lookout(self) -> float:
+		"""The distance actually watched: ``lookout`` when set above ``radius``, else the distance anything can cross
+		in one idle interval at ``speed_cap``."""
+		configured = self._number('lookout', 0)
+		if configured > self.radius:
+			return min(RADIUS_MAX, configured)
+		return lookoutRadius(self.radius, self.interval, self.speedCap)
 
 	@property
 	def ground(self) -> bool:
@@ -333,6 +424,7 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 		active, self._lastNear = holdActive(near, now, self._lastNear, self._number('hold', 60))
 		values = {'aircraft.near': near, 'aircraft.active': active} if rows is None else {
 			**slotValues(rows, self.slots, self._previous), 'aircraft.near': near, 'aircraft.active': active}
+		values['aircraft.nextCheck'] = round(self._next if self._next is not None else self.interval)
 		if rows is not None:
 			self._previous = min(len(rows), self.slots)
 		realtime = {'time': int(datetime.now().timestamp())}
@@ -344,10 +436,15 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 
 	async def publish(self) -> None:
 		lat, lon = self.location
-		url = feedUrl(self.source, lat, lon, self.radius)
+		watch = max(self.radius, self.lookout)
+		url = feedUrl(self.source, lat, lon, watch)
 		data = await asyncio.to_thread(fetch, url)
-		self.publishRows(parseAircraft(data, lat, lon, self.radius, self.ground,
-			self._number('max_altitude', 0), self._get('military', 'True').lower() in ('1', 'true', 'yes', 'on')))
+		seen = parseAircraft(data, lat, lon, watch, self.ground,
+			self._number('max_altitude', 0), self._get('military', 'True').lower() in ('1', 'true', 'yes', 'on'))
+		# The watch ring decides the cadence; only what is inside `radius` is published, so the radar stays yours.
+		if self.adaptive:
+			self._next = nextInterval(seen, self.radius, self.interval, self.fastInterval)
+		self.publishRows([row for row in seen if row['distance'] <= self.radius])
 		if self._failed:
 			log.info('Aircraft: the feed is back')
 			self._failed = None
@@ -357,9 +454,10 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 
 	async def _tick(self) -> None:
 		while True:
-			delay = self.interval
+			delay = self._next if self._next is not None else self.interval
 			try:
 				await self.publish()
+				delay = self._next if self._next is not None else self.interval
 			except asyncio.CancelledError:
 				raise
 			except Exception as e:
