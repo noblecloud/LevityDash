@@ -30,6 +30,7 @@ brief's verification steps.
 
 | brief | scope |
 |---|---|
+| [glyph-system](glyph-system.md) | stage 1 (data-driven packs, typed errors, `fa:regular`) is on `feat/glyph-system`; stage 2 (a vector pack tier drawn as `QPainterPath`) is designed and not started |
 | [gauge-text-treatments](gauge-text-treatments.md) | optical centering — `98°` looks off-centre because `°` is light |
 | [warp-along-path](warp-along-path.md) | `warp:` takes a free path, plus a `bend` blend. Not started; `feat/warped-text` (circle warp) has merged. |
 | [render-scenario-crash](render-scenario-crash.md) | `render_dashboard.py --scenario` SIGSEGVs on a full dashboard (a preset renders fine). Needs a fix or a finer bisect — suggested branch `fix/scenario-render-segv`. |

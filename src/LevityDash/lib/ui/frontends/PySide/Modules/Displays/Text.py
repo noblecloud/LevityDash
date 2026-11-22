@@ -320,7 +320,8 @@ class Text(QGraphicsPathItem):
 
 	def font(self, noIconFont: bool = False) -> QFont:
 		font = QFont(self._font)
-		font = QFont(icon.font) if (icon := self.icon) is not None and not noIconFont else font
+		# A vector glyph has no icon font: its box is sized from the item's own font.
+		font = QFont(icon.font) if (icon := self.icon) is not None and not noIconFont and not getattr(icon, 'isVector', False) else font
 		if g := getattr(self, '_sized', False):
 			font.setPointSizeF(g.font_size_for(self))
 		else:
@@ -417,6 +418,17 @@ class Text(QGraphicsPathItem):
 
 	_cornerWidth: float = 0.0
 	_cornerBake: float = 0.0
+
+	def _vectorGlyph(self):
+		"""The item's icon when it is drawn from path data rather than a font character."""
+		icon = self.icon
+		return icon if getattr(icon, 'isVector', False) else None
+
+	def _glyphBox(self, font: QFont) -> QRectF:
+		"""Where a vector glyph sits against the baseline: square, a cap height tall, above it."""
+		metrics = QFontMetricsF(font)
+		side = metrics.capHeight() or metrics.pixelSize() * 0.7
+		return QRectF(0.0, -side, side, side)
 
 	def _addRun(self, path: QPainterPath, pos: QPointF, font: QFont, text: str):
 		"""`text` in `font` onto `path`. With small runs (decimals, a unit tail) `corner` is not a pen on the whole
@@ -604,6 +616,8 @@ class Text(QGraphicsPathItem):
 		return path
 
 	def _advance(self, string: str, font: QFont) -> float:
+		if not string and self._vectorGlyph() is not None:
+			return self._glyphBox(font).width()
 		layout = self._decimalLayout(string, font)
 		if layout is None:
 			return QFontMetricsF(font).horizontalAdvance(string)
@@ -611,11 +625,15 @@ class Text(QGraphicsPathItem):
 
 	def _inkRect(self, string: str, font: QFont) -> QRectF:
 		"""`tightBoundingRect` of `string`, small decimals applied."""
+		if not string and self._vectorGlyph() is not None:
+			return self._glyphBox(font)
 		if self._decimalRuns(string, font) is None:
 			return QFontMetricsF(font).tightBoundingRect(string)
 		return self._runPath(string, font).boundingRect()
 
 	def _leftBearing(self, string: str, font: QFont) -> float:
+		if not string and self._vectorGlyph() is not None:
+			return 0.0
 		if self._decimalRuns(string, font) is None:
 			return QFontMetricsF(font).leftBearing(string[0] if string else ' ')
 		return self._runPath(string, font).boundingRect().left()
@@ -1642,7 +1660,12 @@ class Text(QGraphicsPathItem):
 
 		# Draw the value and format hint text
 		fmt_hint_text_path.addPath(self._runPath(fmt_hint_text, font).translated(fmt_text_pos))
-		path.addPath(self._runPath(text, font).translated(text_pos))
+		if (glyph := self._vectorGlyph()) is not None:
+			# A vector glyph is a path, not a character: it fills the box `_glyphBox` reserved.
+			box = self._glyphBox(font)
+			path.addPath(glyph.painterPath(box.width()).translated(text_pos.x(), text_pos.y() + box.top()))
+		else:
+			path.addPath(self._runPath(text, font).translated(text_pos))
 		if tail_font:
 			# ink right edge of the text, then the gap; the tail's own left bearing is taken off so its ink starts there
 			self._addRun(path, QPointF(text_rect.left() + main_width + tail_gap - tail_bearing, text_pos.y()), tail_font, tail_run[0])

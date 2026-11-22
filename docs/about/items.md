@@ -83,5 +83,5 @@ See the [roadmap](/roadmap.md) for the full picture.
 - [Expressions](/config/dashboard/expressions.md): a value from a calculation on keys, with units such as `> 90°F`
 - An item that is shown only while a condition is true (`when:`)
 - A dashboard that loads when one item fails. The item shows an error tile.
-- Icon packs: Font Awesome (`fa:`), Material Design Icons (`mdi:`), Weather Icons (`wi:`)
+- Icon packs: Font Awesome (`fa:`), Material Design Icons (`mdi:`), Weather Icons (`wi:`), plus your own from a map file ([glyphs and icon packs](/config/dashboard/icons.md))
 - Text filters (lower, upper, title, capitalize, ordinal, add-ordinal)
