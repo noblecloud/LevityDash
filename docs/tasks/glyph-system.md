@@ -28,6 +28,8 @@ Measured on macOS with PySide6 6.11: `inFont(ord(char))` answers **False for 108
 
 ## Stage 2 — a vector pack tier
 
+Candidates, counts and the measured Qt animation surface are in [PLAN-GLYPH-SYSTEMS.md](../PLAN-GLYPH-SYSTEMS.md). Meteocons' monochrome style and QWeather's `currentColor` 16×16 set are the two worth wiring first.
+
 The reason to want it: three shipped packs are font-only, so a glyph is one colour, cannot animate, and pops between weather conditions. `docs/roadmap.md` has two items waiting on this ("Duotone / two-color icons", "Morphing glyphs"), and both are shared prerequisites.
 
 **Good news: the renderer half already exists.** `Text._runPath` builds glyphs as `QPainterPath` outlines (`_addRun` → `path.addText`), and `_update_path` assembles the item's path with `path.addPath(self._runPath(text, font).translated(text_pos))`. A vector glyph is therefore an *extra path appended at the text position*, not a new item type and not a new renderer tier.
@@ -42,7 +44,9 @@ The work, in order:
 
 ## Stage 3 — motion and morphing
 
-Only after the vector tier. The roadmap's Morphicons note is the design: same-structure pairs interpolate (`QPainterPath.interpolated`), bad matches fade through. A pack needs, per name, an optional `rest` and `hover` path so a glyph has two states. That is a data-model decision to take with the owner, not a detail to invent here.
+Animated SVG is **not** the expensive half: measured on this machine with PySide6 6.11.1, `QSvgRenderer` reports `animated()=True` and renders distinct frames for SMIL `<animateTransform>` and CSS `@keyframes`, so a pack entry whose `.svg` carries a pose can advance frames on a display timer with no new data model. Two caveats: `pyproject.toml` pins `pyside6 = "^6.6.1"` while CSS keyframes need Qt 6.10, and SMIL does not animate arbitrary attributes (`<animate attributeName="r">` reports `animated()=False`). Guard on `animated()` and fall back to a still frame.
+
+Path-to-path morphing is the expensive half and comes last: it needs path correspondence, and `QPainterPath.elementCount()` differs per icon, so every part must be resampled to a common polyline before interpolating. Prefer pose interpolation over a fixed part set (sun, cloud, precip, bolt) — the roadmap's Morphicons note is the fallback design, not the first move. A pack needs, per name, an optional `rest` and `hover` pose so a glyph has two states; that is a data-model decision to take with the owner.
 
 ## Verification
 
