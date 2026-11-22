@@ -48,7 +48,7 @@ Rated by how cleanly they become a pack, not by size.
 - [Octicons](https://github.com/primer/octicons) — 416 names × 2 sizes; small, GitHub-flavoured, supplementary.
 - [Ionicons](https://github.com/ionic-team/ionicons) — 1,357 files at a 512 box with `-outline`/`-sharp` suffixes; least uniform of the file sets.
 - [Simple Icons](https://github.com/simple-icons/simple-icons) — brand logos only; useful as a source/plugin badge pack, never a UI set.
-- [Iconify collections](https://github.com/iconify/icon-sets) — 285 JSON sets, ~300k icons. A **source**, not a pack: its `body`, `width`, `aliases` and `chars` shape is the best-documented registry format we could copy.
+- [Iconify collections](https://github.com/iconify/icon-sets) — **an aggregator, not a set**: 285 cleaned, validated upstream collections in one JSON format, plus the `chars` map used to generate fonts. Checked against its `collections.md` (2026-11-22): it carries Tabler, Iconoir and Lucide, but **not** Meteocons, QWeather or Phosphor. Value here is the format and the normalisation (monotone colours already rewritten to `currentColor`), not a pack to adopt.
 - [Material Symbols](https://developers.google.com/fonts/docs/material_symbols) — font-first; the repo now ships Android assets, not a canonical SVG tree, so it is an upgrade path for the existing `mdi:` font pack, not an SVG pack.
 - [Font Awesome](https://github.com/FortAwesome/Font-Awesome) — already a font pack here; its `svgs/` tree (2,886 files) would buy render quality at large sizes and nothing else.
 
