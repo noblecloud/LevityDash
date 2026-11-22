@@ -86,6 +86,23 @@ Skip, with reasons:
 - **trazo** — its "system" is a colour switch, already covered by the palette rule. It is a sticker set, not an architecture.
 - **Iconify's tooling** — the normalisation is three lines in our converter: fill → `currentColor`, strip the root `width`/`height`, keep the `viewBox`.
 
+## Colour and theming
+
+The theming system already has the right primitives, so the pack data must not carry colours at all — only roles. Rules for the vector tier:
+
+1. **Normalise at import.** Every monotone `fill`/`stroke` becomes role `body`; no raw hex survives conversion. (Iconify's own pipeline does exactly this, which is one reason its format is worth copying.) A set whose colours carry meaning — Meteocons `fill`, the sun yellow and rain blue — records named semantic roles instead of dropping them.
+2. **Resolve at paint time with `Color.role(token)`.** That returns the live colour object, retargeted in place when the theme changes, so a theme switch repaints glyphs without rebuilding the pack. Defaults: `body` → `$text`, `edge` → `$rule`, `accent` → `$accent`, `shadow` → `$background` mixed toward black by 0.3.
+3. **Precedence, matching the existing theme rule that a raw value on an item wins:** item `color:` → the active theme's override for that pack → the pack's own role map.
+4. **A theme may recolour a pack by name**, the same way it recolours a preset by listing it under `scales`: `glyphs: {meteocons: {body: $muted, accent: $accent}}` in a theme file. No pack edit, no dashboard edit.
+5. **Three render modes per item**, set by a new `glyph-color` property:
+   - `themed` (default) — roles resolve to tokens, so glyphs read as part of the board;
+   - `mono` — one colour, from the item's `color:` or `$text`;
+   - `native` — the pack's own palette, for sets where colour is the information (a yellow sun, blue rain). Default for the Meteocons `fill` style only.
+6. **Derive nothing at paint time.** No darkening a token to fake a second layer. Either the theme supplies the colour or the pack's recorded role does; `Color.role` and the theme's own modifiers are the only derivation allowed.
+7. **Animated SVG is the exception.** `QSvgRenderer` bakes colours from the file, so theming an animated glyph means rewriting the body and re-parsing — which resets the frame. Acceptable, because switching a theme already needs a reload (`Ctrl+R`); document it rather than caching frames.
+8. **Gradients later.** A role may name a `scales` entry (`$temperature`) painted as a linear gradient over the glyph box. Not in the first cut.
+9. **Any colour cache must key on the colour and a theme generation counter**, or a theme switch shows stale glyphs.
+
 ## Adoption order
 
 1. **Vector pack tier, static.** `SvgPack` beside the font packs; Meteocons monochrome and QWeather `currentColor` as the first two, both already single-colour SVG. Also convert the incumbent `wi:` set from its `svg/` folder so existing dashboard values keep working. Chip 1 and 3 above land here (registry shape, stroke width).
