@@ -1,8 +1,10 @@
 # The glyph system: more robust, and more than one kind of pack
 
-**Status: open — stage 1 and the static half of stage 2 are on `feat/glyph-system`; the rest is designed.**
+**Status: open — stage 1 and stage 2 (static) are on `feat/glyph-sets`; motion and two-tone painting remain.**
 
-Stage 2 so far: `lib/ui/svgpath.py` (the whole `d` grammar, arcs converted to cubics), a vector style in the map (`svg` + `viewBox` + `stroke`), `VectorIcon` with `painterPath(size)` / `advance(size)`, and `Text` drawing it into the same `QPainterPath` it fills for text (`_glyphBox`, `_advance`, `_inkRect`, `_leftBearing`, and the append at the value path). A shipped `vec:` pack proves it beside the font packs; `tests/ui/test_vector_glyphs.py` covers the parser, the pack, and a laid-out item. Still open in stage 2: the converter for external sets, per-part painting for two-tone glyphs, and colour roles resolved from the theme.
+Stage 2 has landed: `lib/ui/svgpath.py` (the whole `d` grammar, arcs to cubics, `transform`), vector styles in a map (`svg` + `viewBox` + `stroke`, single part or a part list with `stroke`/`role`/`transform`), `VectorIcon` with `painterPath(size)` / `advance(size)` and `cutout` subtraction, `Text` drawing it into the same `QPainterPath` it fills for text, the `import_svg_pack.py` converter, and four packs: `vec:` (16 shipped glyphs), `wiv:` (219, weather-icons' own SVG export), `qw:` (507, QWeather), `meteo:` (519, Meteocons monochrome, 1.3 MB at two decimals). Pack colour comes from `[pack.colors]` resolved through `Color.role`, so it follows the theme.
+
+Still open: per-part painting so `accent`/`edge` roles are more than data, the `glyph-color` modes (`themed`/`mono`/`native`), a theme file recolouring a pack by name, animated SVG frames, and pose morphing.
 
 A glyph is a named picture an item draws (`icon:` on a `text` item, `icon:` on a `realtime` value label, the pins of a graph). Today every glyph is a Private-Use-Area character in an icon font. That is one kind of pack, and the loader around it assumed there would never be another.
 

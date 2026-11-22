@@ -8,17 +8,62 @@ endpoint-to-centre conversion, so nothing is approximated away.
 Paths come back in the source's own coordinate space (the map's `viewBox`); the
 caller scales them.
 """
+import math
 import re
 from math import acos, cos, hypot, pi, radians, sin, sqrt
 from typing import Iterable, List, Tuple
 
 from PySide6.QtCore import QPointF
-from PySide6.QtGui import QPainterPath
+from PySide6.QtGui import QPainterPath, QTransform
 
-__all__ = ['parse', 'viewBox', 'path_data']
+__all__ = ['parse', 'viewBox', 'path_data', 'parse_transform']
 
 _TOKEN = re.compile(r'[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?')
 _COMMANDS = set('MmLlHhVvCcSsQqTtAaZz')
+_TRANSFORM = re.compile(r'(matrix|translate|scale|rotate|skewX|skewY)\s*\(([^)]*)\)')
+
+
+def parse_transform(value: str | None) -> QTransform:
+	"""An SVG `transform` attribute as a `QTransform`.
+
+	Handles what icon sets actually use — `translate`, `scale`, `rotate` (with and
+	without a centre) and `matrix` — applied left to right, which is the order SVG
+	specifies. `skewX`/`skewY` are applied as shears; anything unrecognised is
+	ignored rather than guessed at.
+	"""
+	transform = QTransform()
+	if not value:
+		return transform
+	for name, arguments in _TRANSFORM.findall(value):
+		numbers = [float(x) for x in re.split(r'[\s,]+', arguments.strip()) if x]
+		if name == 'matrix' and len(numbers) == 6:
+			a, b, c, d, e, f = numbers
+			step = QTransform(a, b, c, d, e, f)
+		elif name == 'translate' and numbers:
+			step = QTransform.fromTranslate(numbers[0], numbers[1] if len(numbers) > 1 else 0.0)
+		elif name == 'scale' and numbers:
+			step = QTransform.fromScale(numbers[0], numbers[1] if len(numbers) > 1 else numbers[0])
+		elif name == 'rotate' and numbers:
+			angle = numbers[0]
+			# PySide6 exposes fromRotate on neither 6.6 nor 6.11, so rotate explicitly.
+			cosine, sine = cos(radians(angle)), sin(radians(angle))
+			rotation = QTransform(cosine, sine, -sine, cosine, 0.0, 0.0)
+			if len(numbers) >= 3:
+				cx, cy = numbers[1], numbers[2]
+				step = QTransform.fromTranslate(-cx, -cy) * rotation * QTransform.fromTranslate(cx, cy)
+			else:
+				step = rotation
+		elif name in ('skewX', 'skewY') and numbers:
+			step = QTransform()
+			if name == 'skewX':
+				step.shear(math.tan(math.radians(numbers[0])), 0.0)
+			else:
+				step.shear(0.0, math.tan(math.radians(numbers[0])))
+		else:
+			continue
+		transform = step * transform
+	return transform
+
 
 
 def path_data(markup: str) -> List[str]:

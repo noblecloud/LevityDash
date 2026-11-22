@@ -30,7 +30,7 @@ import zipfile
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import ClassVar, Dict, Optional, TypeAlias, TypeVar, Union
+from typing import ClassVar, Dict, NamedTuple, Optional, TypeAlias, TypeVar, Union
 from urllib import request
 
 from rich.repr import rich_repr
@@ -57,7 +57,7 @@ _SVG = 'svg'
 _VIEWBOX = 'viewBox'
 _STROKE = 'stroke'
 #: Root-table keys that describe the pack rather than a style.
-_META = frozenset({'prefix', 'name', 'default', 'aliases', 'format', 'version', 'also'})
+_META = frozenset({'prefix', 'name', 'default', 'aliases', 'format', 'version', 'also', 'colors', 'colours'})
 _STYLES_KEYS = frozenset({_FONT, _CHARS, _SVG, _VIEWBOX, _STROKE})
 
 
@@ -75,6 +75,14 @@ class IconNotFound(IconError, KeyError):
 
 class FontNotFoundError(IconError):
 	"""The pack has a font section, but none of its fonts draws the character."""
+
+
+class Part(NamedTuple):
+	"""One drawing instruction of a vector glyph."""
+	d: str
+	stroke: float = 0.0
+	role: str = 'body'
+	transform: str = ''
 
 
 @dataclass
@@ -115,8 +123,11 @@ class Icon:
 class VectorIcon(Icon):
 	"""A glyph drawn from path data instead of a font character.
 
-	`parts` are `d` strings in the pack's `viewBox`; `roles` names the colour role of
-	each one (`body` today, `accent`/`edge`/`shadow` when a pack carries a second tone).
+	`parts` are `Part`s in the pack's `viewBox`: a path, its stroke width (0 = fill
+	the shape as drawn), and a role. `cutout` parts are subtracted from the rest,
+	which is how a line-or-knockout icon set expresses a hole in a bigger shape with
+	one colour — Meteocons' monochrome style does exactly that.
+
 	A vector glyph has no `unicode`, so `str()` is empty and callers that lay text out
 	must ask `painterPath()` and `advance()` instead.
 	"""
@@ -124,8 +135,7 @@ class VectorIcon(Icon):
 	parts: tuple = ()
 	viewBox: tuple = (24.0, 24.0)
 	roles: tuple = ()
-	#: Stroke width in `viewBox` units. A stroke-only set (Lucide, Tabler, Iconoir) declares
-	#: one and the outline is baked into the path, so a glyph still fills with one brush.
+	#: Stroke width in `viewBox` units for parts that do not carry their own.
 	stroke: float = 0.0
 
 	@property
@@ -134,24 +144,28 @@ class VectorIcon(Icon):
 
 	@cached_property
 	def unitPath(self) -> QPainterPath:
-		"""Every part in the source space, as one path."""
-		path = QPainterPath()
-		path.setFillRule(Qt.WindingFill)
-		stroker = None
-		if self.stroke:
-			stroker = QPainterPathStroker()
-			stroker.setWidth(float(self.stroke))
-			stroker.setCapStyle(Qt.RoundCap)
-			stroker.setJoinStyle(Qt.RoundJoin)
+		"""Every part in the source space: the body, less any cutouts."""
+		body = QPainterPath()
+		body.setFillRule(Qt.WindingFill)
+		cutout = QPainterPath()
+		cutout.setFillRule(Qt.WindingFill)
 		for part in self.parts:
-			segment = svgpath.parse(part)
-			if stroker is not None:
-				# Stroke-only geometry (Lucide, Tabler, and this pack): the outline is the glyph.
-				# Filling the segments too would turn a drawn circle into a disc.
-				path.addPath(stroker.createStroke(segment))
+			segment = svgpath.parse(part.d)
+			if part.transform:
+				segment = svgpath.parse_transform(part.transform).map(segment)
+			if part.stroke:
+				stroker = QPainterPathStroker()
+				stroker.setWidth(float(part.stroke))
+				stroker.setCapStyle(Qt.RoundCap)
+				stroker.setJoinStyle(Qt.RoundJoin)
+				segment = stroker.createStroke(segment)
+			if part.role == 'cutout':
+				cutout.addPath(segment)
 			else:
-				path.addPath(segment)
-		return path
+				body.addPath(segment)
+		if cutout.isEmpty():
+			return body
+		return body.subtracted(cutout)
 
 	def painterPath(self, size: float) -> QPainterPath:
 		"""The glyph scaled into a square `size`, box top-left at (0, 0)."""
@@ -189,6 +203,7 @@ class IconPack:
 		self.charMapPath = charMapPath
 		self._data = data or {}
 		self._aliases = dict(aliases or {})
+		self._roles = {str(key): str(value) for key, value in (self._data.get('colors') or self._data.get('colours') or {}).items()}
 		self._icons: Dict[tuple, Icon] = {}
 		self._charMap = None
 		self._fonts: Dict[str, QFont] = {}
@@ -255,7 +270,10 @@ class IconPack:
 			if _VIEWBOX in entry:
 				entry[_VIEWBOX] = svgpath.viewBox(entry[_VIEWBOX])
 			if _SVG in entry and isinstance(entry[_SVG], dict):
-				entry[_SVG] = {name: value for name, value in entry[_SVG].items() if value}
+				entry[_SVG] = {
+					name: value for name, value in entry[_SVG].items()
+					if (isinstance(value, str) and value.strip()) or (isinstance(value, list) and value)
+				}
 			if chars:
 				entry[_CHARS] = chars
 			if chars or _FONT in entry or _SVG in entry:
@@ -327,6 +345,15 @@ class IconPack:
 
 	def hasName(self, name: str) -> bool:
 		return self.resolve_alias(name) in self.names
+
+	def roleToken(self, role: str) -> Optional[str]:
+		"""The theme token this pack paints `role` with, if it declares one.
+
+		`body` is the whole glyph for a single-colour set; `accent`/`edge`/`shadow` are
+		for a set with more than one tone. Unset means the caller's own colour.
+		"""
+		token = self._roles.get(role)
+		return token.lstrip('$') if token else None
 
 	def _styleFor(self, name: str, style: Optional[str] = None) -> tuple:
 		"""`(style, char)` for `name`; the requested style first, then any style that has it."""
@@ -403,17 +430,18 @@ class IconPack:
 		icon = self._icons[key] = Icon(self, resolved, char, font)
 		return icon
 
-	def _vectorIcon(self, key: tuple, style: str, name: str, markup: str) -> 'VectorIcon':
+	def _vectorIcon(self, key: tuple, style: str, name: str, markup) -> 'VectorIcon':
 		spec = self.charMap[style]
-		parts = tuple(svgpath.path_data(markup))
+		default_stroke = float(spec.get(_STROKE) or 0.0)
+		parts = _parts_of(markup, default_stroke)
 		if not parts:
 			raise IconNotFound(f'{self.prefix}:{name} has no path data')
 		icon = VectorIcon(
 			self, name, '', QFont(),
 			parts=parts,
 			viewBox=spec.get(_VIEWBOX, (24.0, 24.0)),
-			roles=tuple(['body'] * len(parts)),
-			stroke=float(spec.get(_STROKE) or 0.0),
+			roles=tuple(part.role for part in parts),
+			stroke=default_stroke,
 		)
 		self._icons[key] = icon
 		return icon
@@ -436,7 +464,16 @@ class IconPack:
 			if spec.get(_FONT) and not Path(spec[_FONT]).exists():
 				issues.append((style, _FONT, f'font file is missing: {spec[_FONT]}'))
 			for name, svg in (spec.get(_SVG) or {}).items():
-				if not isinstance(svg, str) or not svg.strip():
+				if isinstance(svg, str):
+					empty = not svg.strip()
+				elif isinstance(svg, (list, tuple)):
+					empty = not any(
+						(isinstance(part, str) and part.strip()) or (isinstance(part, dict) and part.get('d'))
+						for part in svg
+					)
+				else:
+					empty = True
+				if empty:
 					issues.append((style, _SVG, f'{name!r} has empty path data'))
 		for alias, target in self._aliases.items():
 			name = target.split(':', 1)[-1]
@@ -464,6 +501,29 @@ class IconPack:
 
 
 # --------------------------------------------------------------------- helpers
+
+
+def _parts_of(markup, default_stroke: float = 0.0) -> tuple:
+	"""`Part`s from a map value: a `d` string, raw `<svg>` markup, or a list of part tables."""
+	if isinstance(markup, str):
+		return tuple(Part(d=d, stroke=default_stroke) for d in svgpath.path_data(markup))
+	if not isinstance(markup, (list, tuple)):
+		return ()
+	parts = []
+	for entry in markup:
+		if isinstance(entry, str):
+			parts.extend(Part(d=d, stroke=default_stroke) for d in svgpath.path_data(entry))
+			continue
+		if not isinstance(entry, dict) or not entry.get('d'):
+			continue
+		stroke = entry.get('stroke', None)
+		parts.append(Part(
+			d=' '.join(svgpath.path_data(str(entry['d']))),
+			stroke=default_stroke if stroke is None else float(stroke),
+			role=str(entry.get('role') or 'body'),
+			transform=str(entry.get('transform') or ''),
+		))
+	return tuple(parts)
 
 
 def _to_char(value) -> Optional[str]:
@@ -562,6 +622,11 @@ def packs() -> Dict[str, IconPack]:
 	return discover()
 
 
+def _ordered() -> list:
+	"""Packs in prefix order: a bare name resolves the same way whatever the file order is."""
+	return [discover()[prefix] for prefix in sorted(discover())]
+
+
 def _pack(prefix: str) -> IconPack:
 	if (pack := IconPack.get(prefix)) is not None:
 		return pack
@@ -596,7 +661,19 @@ def getIcon(name: str, style: Optional[str] = None) -> Icon:
 	if not raw:
 		raise IconNotFound('An empty string is not an icon name')
 
-	for pack in packs().values():
+	# A declared alias wins over a same-spelled real name: `clear-day` is Meteocons' own
+	# glyph, but the weather pack maps that vocabulary onto `day-sunny` explicitly, and an
+	# explicit mapping is the stronger statement.
+	for pack in _ordered():
+		target = pack.resolve_alias(raw)
+		if target == raw:
+			continue
+		if ':' in target:
+			return getIcon(target, style)
+		return pack.getIcon(target, style)
+	# Then a real name, packs by prefix so a bare name resolves the same way every run
+	# (`wi` before `wiv`, both of which draw `day-sunny`).
+	for pack in _ordered():
 		if pack.hasName(raw):
 			return pack.getIcon(raw, style)
 	raise _missing(raw)
