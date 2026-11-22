@@ -21,24 +21,16 @@ Floor warning: `pyproject.toml` pins `pyside6 = "^6.6.1"`; CSS `@keyframes` supp
 
 ## Weather glyph sets
 
-Shortlist first; the rest follows.
+**Two new weather sets. Chosen 2026-11-22.**
 
-| Set | What it gives | Why it is on the shortlist |
+| Set | What it gives | Why it was kept |
 |---|---|---|
-| [Meteocons](https://github.com/basmilius/meteocons) | 519 icons per style in fill/flat/line/**monochrome**; 108 animated Lottie in-repo, SVGs published to npm (`@meteocons/svg`, `@meteocons/svg-static`) | the only set whose vocabulary is *generated* (condition × sky cover × day/night) instead of enumerated; a monochrome style keeps theme tinting; a still and an animated file for the same name |
-| [QWeather Icons](https://github.com/qwd/Icons) | 507 monochrome 16×16 `currentColor` SVGs, plus `-fill` variants and an icon font | numeric icon codes that map 1:1 onto a provider's `icon` field, day/night pairs, 8 moon phases, **air quality, pollution and warning glyphs** in the same set |
-| [MET Norway weathericons](https://github.com/metno/weathericons) | 83 SVGs, the full MET symbol grid | smallest surface; adds `_polartwilight` as a third sky state; its symbol ids are reused by other sets |
+| [Meteocons](https://github.com/basmilius/meteocons) | 475+ icons in 4 styles (fill/flat/line/**monochrome**), SVG and Lottie; animated and static SVG as separate packages (`@meteocons/svg`, `@meteocons/svg-static`) | the only set whose vocabulary is *generated* (condition × sky cover × day/night) instead of enumerated; a monochrome style keeps theme tinting; a still and an animated file for the same name |
+| [QWeather Icons](https://github.com/qwd/Icons) | 507 monochrome 16×16 `currentColor` SVGs in `icons/`, plus `-fill` variants and an icon font in `font/` | numeric icon codes that map 1:1 onto a provider's `icon` field, day/night pairs, 8 moon phases, **air quality, pollution and warning glyphs** in the same set |
 
-Also worth knowing, one line each:
+[Weather Icons](https://github.com/erikflowers/weather-icons) stays as the existing `wi:` pack; its `svg/` folder holds the same 219 shapes, so existing names can move to a vector backend without renaming a single dashboard value.
 
-- [Weather Iconic](https://github.com/konradmichalik/weather-iconic) — 100 icons shipped three ways (sprite, webfont, SVG); day/night names kept structurally parallel.
-- [Weather Icons](https://github.com/erikflowers/weather-icons) — the incumbent (`wi:`). Its `svg/` folder holds the same 219 shapes, so existing names can move to a vector backend without renaming a single dashboard value.
-- [Makin-Things weather-icons](https://github.com/Makin-Things/weather-icons) — static and animated files under one name; severity tiers (isolated / scattered / severe) that `wi:` collapses.
-- [Visual Crossing WeatherIcons](https://github.com/visualcrossing/WeatherIcons) — 22 conditions × 4 themes × colour/mono; theme as a directory, not a redraw.
-- [Amedia Meteo Icons](https://github.com/amedia/meteo-icons) — one wind arrow meant to be rotated, not 16 pre-baked directions.
-- [amCharts animated weather icons](https://www.amcharts.com/free-animated-svg-weather-icons/) — 23 icons, animation carried inside the file as CSS keyframes.
-- [Climacons](https://github.com/cliffordp/climacons) — an "Alt" emphasis variant as a third axis beside sun/moon.
-- [Weather Underground icons](https://github.com/manifestinteractive/weather-underground-icons) — `chance-of-X` as its own glyph, `nt_` night prefix.
+**Dropped 2026-11-22, by decision — do not re-propose without a reason:** MET Norway weathericons, Weather Iconic, Makin-Things, Visual Crossing, Amedia Meteo Icons, amCharts animated weather icons, Climacons, Weather Underground icons. They added vocabularies (severity tiers, twilight, chance-of-X) that neither Meteocons' generated naming nor QWeather's code scheme needs.
 
 ## General vector libraries
 
