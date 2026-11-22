@@ -15,6 +15,7 @@
 		- [Bindings](config/dashboard/bindings.md)
 		- [Variables](config/dashboard/variables.md)
 		- [Presets](config/dashboard/presets.md)
+		- [Glyphs and icon packs](config/dashboard/icons.md)
 		- [Table](config/dashboard/table.md)
 		- [Size groups](config/dashboard/size-groups.md)
 		- [Value Sources](config/dashboard/expressions.md)

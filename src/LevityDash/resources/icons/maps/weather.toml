@@ -1,5 +1,15 @@
 [weather-icons]
 prefix = "wi"
+name = "Weather Icons"
+default = "regular"
+
+# Common condition vocabularies that are not this pack's own names, so a schema can
+# publish the forecast-io style vocabulary and still draw a glyph.
+[weather-icons.aliases]
+clear-day = "day-sunny"
+clear-night = "night-clear"
+partly-cloudy-day = "day-cloudy"
+partly-cloudy-night = "night-alt-cloudy"
 
 [weather-icons.regular]
 font = "{__resources__}/icons/weathericons.ttf"

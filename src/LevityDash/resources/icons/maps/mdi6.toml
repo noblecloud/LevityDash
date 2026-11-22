@@ -1,5 +1,8 @@
 [mdi6]
-prefix = "mdi6"
+prefix = "mdi"
+name = "Material Design Icons"
+default = "regular"
+also = ["mdi6"]
 
 [mdi6.regular]
 font = "{__resources__}/icons/materialdesignicons6-webfont.ttf"
