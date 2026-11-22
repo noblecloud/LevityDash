@@ -480,7 +480,14 @@ class Text(QGraphicsPathItem):
 	def _applyInk(self):
 		"""Brush and pen from the fill colour and `outline`. With no outline the glyphs are filled and
 		there is no pen, as before."""
-		brush = self._gradientBrush or (self._fillBrush if self._fillBrush is not None else QBrush(Color.text.QColor))
+		brush = self._gradientBrush or self._fillBrush
+		if brush is None:
+			# A vector pack may name the theme token its glyphs are drawn in (`[pack.colors] body = "$accent"`);
+			# a font glyph, and any pack that names nothing, takes the theme's text colour.
+			token = None
+			if (glyph := self._vectorGlyph()) is not None:
+				token = glyph.iconPack.roleToken('body')
+			brush = QBrush(Color.role(token).QColor if token else Color.text.QColor)
 		outline = self._outline
 		if not outline:
 			if self._cornerWidth > 0:

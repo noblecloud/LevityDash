@@ -2,13 +2,19 @@
 
 A glyph is a named picture that an item draws instead of, or beside, its text. You write it as `pack:name`, for example `wi:day-sunny`. The item properties that take a glyph are `icon` on a `text` item, `icon` on a `realtime` value label, and the pins of a graph (`pins.glyph`, `pins.steps`, `pins.map`).
 
-LevityDash ships three packs.
+LevityDash ships these packs.
 
-| Prefix | Pack | Names |
-| --- | --- | --- |
-| `fa:` | Font Awesome 6 (`solid`, `regular`, `brands`) | 1852 |
-| `mdi:` | Material Design Icons 6 | 6395 |
-| `wi:` | Weather Icons | 596 |
+| Prefix | Pack | Kind | Names |
+| --- | --- | --- | --- |
+| `fa:` | Font Awesome 6 (`solid`, `regular`, `brands`) | font | 1852 |
+| `mdi:` | Material Design Icons 6 | font | 6395 |
+| `wi:` | Weather Icons | font | 596 |
+| `wiv:` | Weather Icons | vector, `0 0 30 30` | 219 |
+| `qw:` | QWeather Icons | vector, `0 0 16 16` | 507 |
+| `meteo:` | Meteocons (monochrome) | vector, `0 0 128 128` | 519 |
+| `vec:` | Levity Vectors (arrows, sun, moon, cloud, wind, compass, gauge) | vector, `0 0 24 24` | 16 |
+
+`wi:` and `wiv:` carry the same names from the same project — one font, one set of exported shapes. Keep `wi:` in a value that must not change; use `wiv:` where a vector draws better at size.
 
 ```yaml
 - type: text
@@ -21,7 +27,7 @@ A name that is not in the pack you asked for is an error tile, not a crash. The 
 ## How a name is found
 
 1. `pack:name` asks that pack. A retired prefix still works: `mdi6:` answers the `mdi` pack.
-2. A bare name (`home`, `day-sunny`) is looked for in every pack, in load order. Two packs that share a name resolve to the first one, so write the prefix when it matters.
+2. A bare name (`home`, `day-sunny`) is looked for in every pack. A declared alias is checked first, because an explicit mapping is the stronger statement; then real names, packs in **prefix order**, so the answer is the same every run. Two packs that share a name resolve to the first one, so write the prefix when it matters.
 3. A pack's `aliases` table maps another vocabulary onto its own names. The weather pack, for example, accepts the forecast-io names `clear-day`, `clear-night`, `partly-cloudy-day`, and `partly-cloudy-night`.
 4. `icon:` in front of the whole value is ignored, so `icon:wi:rain` is the same as `wi:rain`.
 
@@ -73,11 +79,62 @@ sun = 'M12 7 A5 5 0 1 1 12 17 A5 5 0 1 1 12 7 Z M12 1.5 V4 M12 20 V22.5'
 - A vector glyph is square: it occupies a box one cap height wide and tall, sitting on the baseline, and it takes the item's `color`. It is not a character, so it does not follow `font`, `weight`, or letter spacing.
 - `vec:` ships with the app: `arrow-up`, `arrow-down`, `arrow-left`, `arrow-right`, `plus`, `minus`, `dot`, `ring`, `sun`, `moon`, `cloud`, `rain`, `snow`, `wind`, `gauge-low`, `compass`.
 
+The parser is `lib/ui/svgpath.py` and covers the whole `d` grammar — `M L H V C S Q T A Z`, absolute and relative, implicit repeats, elliptical arcs converted to cubics, and `transform` (translate, scale, rotate, matrix, skew).
+
+A glyph may also be a list of parts, when its pieces do not share one mode:
+
+```toml
+[meteocons.mono.svg]
+clear-day = [
+  { d = "M64 16…", role = "body" },
+  { d = "M64 46…", stroke = 4 },
+  { d = "M64 58…", role = "cutout" },
+]
+```
+
+- `stroke` on a part strokes that part (`fill="none"` in the source); without it the part fills.
+- `role = "cutout"` is subtracted from the rest, which is how a monochrome set draws a hole in a bigger shape with one colour.
+- `transform` is kept and applied to that part.
+- `role = "body"` (the default) is the glyph. `accent`, `edge` and `shadow` are reserved for sets with more than one tone.
+
+### Converting a set
+
+```sh
+.venv/bin/python src/LevityDash/devtools/import_svg_pack.py SOURCE_DIR OUT.toml \
+    --prefix qw --name "QWeather Icons" --style regular --strip qi- --precision 2
+```
+
+It reads paths and the basic shapes (`circle`, `ellipse`, `rect`, `line`, `polyline`, `polygon`), keeps each part's stroke and transform, turns `fill="white"` into a `cutout`, and drops gradients, masks, filters and clip paths with a warning. `--precision` rounds coordinates, which matters for a dense set: Meteocons' 519 glyphs are 1.3 MB at two decimals. A set with more than one `viewBox` is refused rather than drawn wrong.
+
+The shipped vector maps are generated this way: `wiv:` from weather-icons' own `svg/` folder, `qw:` from `qwd/Icons/icons`, `meteo:` from `@meteocons/svg-static` (monochrome).
+
+Provenance of the three vendored maps:
+
+| Map | Source | Revision |
+| --- | --- | --- |
+| `weather-vector.toml` | https://github.com/erikflowers/weather-icons `svg/` | `bb80982`, 2021-12-13 |
+| `qweather.toml` | https://github.com/qwd/Icons `icons/` | `d7d4ef4`, 2025-12-02 |
+| `meteocons.toml` | `@meteocons/svg-static` (npm), `monochrome/` | 0.1.0 |
+
+To regenerate one: clone or `npm pack` the source, then run the converter with the prefix, style and `--precision 2` shown above. Nothing calls the converter at runtime, so a map is a build artifact that can be rebuilt at any time from a stated revision.
+
+### Colour
+
+A vector glyph paints with the item's `color`, or with the theme's `$text` when the item names none. A pack may choose the token its glyphs are drawn in:
+
+```toml
+[meteocons]
+prefix = "meteo"
+colors = { body = "$accent" }
+```
+
+The token is read through the theme at paint time (`Color.role`), so it follows a theme switch. Items with an explicit `color:` still win.
+
 <!-- panels:start -->
 
 <!-- div:left-panel -->
 
-The parser is `lib/ui/svgpath.py` and covers the whole `d` grammar — `M L H V C S Q T A Z`, absolute and relative, implicit repeats, and elliptical arcs converted to cubics. External SVG sets are converted to a map by a script rather than copied file by file; that tooling is next (see the brief).
+Any item that takes `icon:` takes a vector glyph. There is nothing to opt into: the prefix says which pack, and the pack says whether it is a font or a path.
 
 <!-- div:right-panel -->
 
@@ -97,8 +154,8 @@ It does not check glyph coverage with `QFontMetrics.inFont`. That call reports f
 
 ## Limits
 
-- One colour per glyph. A glyph is a character in an icon font, so it takes the item's `color` and nothing else; there is no second colour, gradient, or outline.
-- No animation. A glyph pops from one condition to the next.
-- A glyph is a character, so it is sized like text. It does not scale independently of the item's font size.
+- One colour per glyph. A glyph is one fill, so a set whose artwork needs two tones draws flattened; the `role` field is recorded for that work but only `cutout` changes the paint today.
+- No animation yet. Qt plays animated SVG (`@keyframes`, SMIL `animateTransform`), but the item does not advance frames.
+- A font glyph is sized like text; a vector glyph reserves a square one cap height wide. Neither scales independently of the item's font size.
 
-These three limits are what a vector pack tier would lift; see [the glyph system brief](../tasks/glyph-system.md).
+These are what the rest of the glyph brief is for; see [the glyph system brief](../tasks/glyph-system.md).

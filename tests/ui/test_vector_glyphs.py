@@ -44,6 +44,31 @@ def test_a_vector_glyph_has_a_square_box_at_any_size():
 	assert bounds.width() > 20 and bounds.height() > 20, 'the glyph fills its box'
 
 
+def test_the_converted_sets_are_discovered():
+	module = icons()
+	for prefix, count in (('wiv', 219), ('qw', 507), ('meteo', 519)):
+		pack = module.packs()[prefix]
+		assert len(pack.names) == count, f'{prefix} has {len(pack.names)} names'
+		assert pack.validate() == [], f'{prefix}: {pack.validate()[:3]}'
+
+
+def test_a_converted_glyph_draws_at_its_viewbox():
+	module = icons()
+	for name, side in (('wiv:day-sunny', 30.0), ('qw:100', 16.0), ('meteo:clear-day', 128.0)):
+		icon = module.getIcon(name)
+		assert icon.viewBox == (side, side), f'{name} viewBox {icon.viewBox}'
+		bounds = icon.painterPath(64.0).boundingRect()
+		assert bounds.width() > 8 and bounds.height() > 8, f'{name} is empty: {bounds}'
+
+
+def test_a_part_with_a_stroke_is_stroked_and_a_cutout_is_subtracted():
+	module = icons()
+	icon = module.getIcon('meteo:clear-day')
+	strokes = [part for part in icon.parts if part.stroke]
+	assert strokes, 'the sun core is a stroked circle in the source'
+	assert icon.iconPack.roleToken('body') is None, 'a pack declares a colour only when it wants one'
+
+
 def test_a_stroke_only_glyph_still_fills():
 	# `stroke = 2` in the map is baked into the outline, so one brush draws it.
 	module = icons()
