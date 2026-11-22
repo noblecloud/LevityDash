@@ -51,9 +51,14 @@ Rated by how cleanly they become a pack, not by size.
 - [Iconoir](https://github.com/iconoir-icons/iconoir) — 1,383 regular (1.5 px stroke) + 288 solid.
 - [Heroicons](https://github.com/tailwindlabs/heroicons) — good drawing, but colours are hard-coded (`#0F172A`), so each file needs a rewrite on import.
 - [Bootstrap Icons](https://github.com/twbs/icons) — flawless ingest mechanics, wrong grid (16) for large dashboard draws.
+- [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons) — 1,431 names across 7 sizes; size in the filename forces one size per pack, colours hard-coded.
+- [Solar](https://github.com/480-Design/Solar-Icon-Set) — 7,330 files in 6 styles; Title Case names with spaces make key derivation painful.
+- [Octicons](https://github.com/primer/octicons) — 416 names × 2 sizes; small, GitHub-flavoured, supplementary.
+- [Ionicons](https://github.com/ionic-team/ionicons) — 1,357 files at a 512 box with `-outline`/`-sharp` suffixes; least uniform of the file sets.
 - [Simple Icons](https://github.com/simple-icons/simple-icons) — brand logos only; useful as a source/plugin badge pack, never a UI set.
 - [Iconify collections](https://github.com/iconify/icon-sets) — 285 JSON sets, ~300k icons. A **source**, not a pack: its `body`, `width`, `aliases` and `chars` shape is the best-documented registry format we could copy.
 - [Material Symbols](https://developers.google.com/fonts/docs/material_symbols) — font-first; the repo now ships Android assets, not a canonical SVG tree, so it is an upgrade path for the existing `mdi:` font pack, not an SVG pack.
+- [Font Awesome](https://github.com/FortAwesome/Font-Awesome) — already a font pack here; its `svgs/` tree (2,886 files) would buy render quality at large sizes and nothing else.
 
 ## Systems: the three ideas worth taking
 
@@ -66,7 +71,7 @@ Rated by how cleanly they become a pack, not by size.
 3. **A pack is a registry entry with a build step, not a class.** Iconify JSON normalises `{prefix, icons{name:{body, left/top/width/height, rotate, hFlip, vFlip}}, aliases{parent + transform}, chars{hex → name}}`; fantasticon turns an SVG folder into a font plus a codepoints JSON with pinned PUA values.
    → **Decision it implies:** one loader reads a map; a build script generates the PUA/char table. The hand-kept char maps and the per-pack Python classes both disappear. Stage 1 of the brief already made discovery data-driven; this is the same move one level deeper.
 
-Morphing (Morphicons) stays last: it needs path correspondence, and `QPainterPath.elementCount()` differs per icon, so every part must be resampled to a common polyline before interpolating. Pose animation buys most of the delight for a fraction of that cost.
+Morphing ([Morphicons](https://www.morphicons.com/docs)) stays last: it needs path correspondence, and `QPainterPath.elementCount()` differs per icon, so every part must be resampled to a common polyline before interpolating. Pose animation buys most of the delight for a fraction of that cost. The platform capability behind every animated option is [Qt 6.10's animated vector graphics](https://www.qt.io/blog/animated-vector-graphics-in-qt-6.10) (CSS keyframes in Qt SVG, plus a tech-preview Lottie backend).
 
 ## Adoption order
 
