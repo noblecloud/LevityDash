@@ -304,13 +304,25 @@ items:
         color: $accent
         size: 100%
   - type: realtime.text
-    key: environment.condition.condition
+    key: environment.condition.icon
     title: false
     alignment: CenterLeft
     geometry:
       x: 39.5%
       y: 23.6%
-      width: 10%
+      width: 2.2%
+      height: 2.4%
+    display:
+      valueLabel:
+        color: $muted
+  - type: realtime.text
+    key: environment.condition.condition
+    title: false
+    alignment: CenterLeft
+    geometry:
+      x: 41.8%
+      y: 23.6%
+      width: 7.9%
       height: 2.4%
     display:
       valueLabel:
@@ -624,6 +636,30 @@ items:
       right: 0
       top: 0
       bottom: 0
+  - type: text
+    text: x
+    font: $display
+    weight: Medium
+    color: $warn
+    alignment: CenterRight
+    geometry:
+      x: 89.9%
+      y: 5.3%
+      width: 2.6%
+      height: 3.6%
+    icon: wi:sunrise
+  - type: text
+    text: x
+    font: $display
+    weight: Medium
+    color: $accent
+    alignment: CenterRight
+    geometry:
+      x: 89.9%
+      y: 12.9%
+      width: 2.6%
+      height: 3.6%
+    icon: wi:sunset
   - type: text
     text: SUNSET
     font: Barlow Condensed
@@ -1016,7 +1052,7 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: H
+    text: x
     font: $display
     weight: Medium
     color: $faint
@@ -1029,8 +1065,7 @@ items:
     matchingGroup:
       group: global.hlmark
       matchAll: true
-    tracking: 0
-    format-hint: H
+    icon: vec:arrow-up
   - type: realtime.text
     key: max(indoor.humidity.humidity#bedroom, 24h)
     title: false
@@ -1064,21 +1099,20 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: L
+    text: x
     font: $display
     weight: Medium
     color: $faint
     alignment: BottomLeft
     geometry:
       x: 95.36%
-      y: 35.02%
+      y: 35.35%
       width: 0.8%
       height: 1.25%
     matchingGroup:
       group: global.hlmark
       matchAll: true
-    tracking: 0
-    format-hint: H
+    icon: vec:arrow-down
   - type: realtime.text
     key: min(indoor.humidity.humidity#bedroom, 24h)
     title: false
@@ -1159,7 +1193,7 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: H
+    text: x
     font: $display
     weight: Medium
     color: $faint
@@ -1172,8 +1206,7 @@ items:
     matchingGroup:
       group: global.hlmark
       matchAll: true
-    tracking: 0
-    format-hint: H
+    icon: vec:arrow-up
   - type: realtime.text
     key: max(indoor.temperature.dewpoint#bedroom, 24h)
     title: false
@@ -1207,21 +1240,20 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: L
+    text: x
     font: $display
     weight: Medium
     color: $faint
     alignment: BottomLeft
     geometry:
       x: 95.36%
-      y: 42.57%
+      y: 42.9%
       width: 0.8%
       height: 1.25%
     matchingGroup:
       group: global.hlmark
       matchAll: true
-    tracking: 0
-    format-hint: H
+    icon: vec:arrow-down
   - type: realtime.text
     key: min(indoor.temperature.dewpoint#bedroom, 24h)
     title: false
@@ -1430,7 +1462,7 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: H
+    text: x
     font: $display
     weight: Medium
     color: $faint
@@ -1443,8 +1475,7 @@ items:
     matchingGroup:
       group: global.hlmark
       matchAll: true
-    tracking: 0
-    format-hint: H
+    icon: vec:arrow-up
   - type: realtime.text
     key: max(indoor.humidity.humidity#terrarium, 24h)
     title: false
@@ -1478,21 +1509,20 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: L
+    text: x
     font: $display
     weight: Medium
     color: $faint
     alignment: BottomLeft
     geometry:
       x: 95.36%
-      y: 54.62%
+      y: 54.95%
       width: 0.8%
       height: 1.25%
     matchingGroup:
       group: global.hlmark
       matchAll: true
-    tracking: 0
-    format-hint: H
+    icon: vec:arrow-down
   - type: realtime.text
     key: min(indoor.humidity.humidity#terrarium, 24h)
     title: false
@@ -1573,7 +1603,7 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: H
+    text: x
     font: $display
     weight: Medium
     color: $faint
@@ -1586,8 +1616,7 @@ items:
     matchingGroup:
       group: global.hlmark
       matchAll: true
-    tracking: 0
-    format-hint: H
+    icon: vec:arrow-up
   - type: realtime.text
     key: max(indoor.temperature.dewpoint#terrarium, 24h)
     title: false
@@ -1621,21 +1650,20 @@ items:
       top: 0
       bottom: 0
   - type: text
-    text: L
+    text: x
     font: $display
     weight: Medium
     color: $faint
     alignment: BottomLeft
     geometry:
       x: 95.36%
-      y: 62.17%
+      y: 62.5%
       width: 0.8%
       height: 1.25%
     matchingGroup:
       group: global.hlmark
       matchAll: true
-    tracking: 0
-    format-hint: H
+    icon: vec:arrow-down
   - type: realtime.text
     key: min(indoor.temperature.dewpoint#terrarium, 24h)
     title: false

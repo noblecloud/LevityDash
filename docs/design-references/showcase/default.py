@@ -85,6 +85,7 @@ def data(rooms=INDOOR, name='default'):
 	for depth, k in (('moisture', 1.0), ('1-3cm', 0.85), ('3-9cm', 0.6), ('9-27cm', 0.3), ('27-81cm', 0.1)):
 		d.add(f'environment.soil.moisture.{depth}', '%', d.series(lambda h, day, t, k=k: 100 * wet(t, k), digits=0), type='soil', digits=0)
 	d.add('environment.condition.condition', None, value=3, type='WeatherCode')
+	d.add('environment.condition.icon', None, value=3, type='icon', iconType='glyph', aliases='@conditionIcon')
 	for key, at in (('sunrise', '05:26'), ('sunset', '20:31')):
 		# The render clock runs in UTC while the seed's place does not: four hours make up the difference.
 		moment = datetime.fromisoformat(f'2026-06-21T{at}:00')
@@ -241,13 +242,13 @@ def room(caption, sfx, color, x, y, w, h, i):
 		out += [cap_(name, g(xr, ry, wr, CAP)),
 		        num(k, g(xr, ry + CAP + 0.3, wr * 0.68, 4.2), c, group='global.side', align='TopLeft', weight='Medium', font=TEMP_FONT,
 		            hint=hint, unit='Inline')]
-		# The last day's high over its low, small, in the space after the number: a faint H or L, then the value.
+		# The last day's high over its low, small, in the space after the number: a faint up or down arrow, then the value.
 		xh, wh, lh = xr + wr * 0.7, wr * 0.3, 2.0
-		for j, (mark, fn, lift) in enumerate((('H', 'max', 0), ('L', 'min', 0.33))):
+		for j, (arrow, fn) in enumerate((('vec:arrow-up', 'max'), ('vec:arrow-down', 'min'))):
 			yy = ry + CAP + 0.3 + j * (lh + 0.2)
-			# Letter and number both sit on the bottom of their boxes, so they share a baseline. The digits end on one line
-			# (a 100% over an 85% keeps its % in line). A lone L sits lower in its box than an H, so it is lifted to match.
-			out += [cap(mark, g(xh, yy + lh - 1.45 - lift, 0.8, 1.25), '$faint', align='BottomLeft', group='global.hlmark', tracking=0, **{'format-hint': 'H'}),
+			# Arrow and number both sit on the bottom of their boxes, so they share a baseline (a vector glyph stands on the
+			# baseline, a cap height tall). The digits end on one line (a 100% over an 85% keeps its % in line).
+			out += [text('x', g(xh, yy + lh - 1.45, 0.8, 1.25), color='$faint', align='BottomLeft', group='global.hlmark', icon=arrow),
 			        num(f'{fn}({k}, 24h)', g(xh + 0.8, yy, wh - 0.8, lh), '$muted', group='global.hl', align='BottomLeft', font=TEMP_FONT,
 			            weight='Medium', hint=hint, unit='Inline', **{'number-align': 'end'})]
 	return out
@@ -287,7 +288,10 @@ def board(rooms=INDOOR):
 		    fill={'from': 'environment.temperature.low', 'to': 'environment.temperature.high', 'gradient': '$temperature', 'weight': '42%',
 		          'glow': GLOW},
 		    pointer={'type': 'line', 'color': '$accent', 'size': '100%'}),
-		{'type': 'realtime.text', 'key': 'environment.condition.condition', 'title': False, 'alignment': 'CenterLeft', 'geometry': g(x, 23.6, 10, 2.4),
+		# The sky's condition as a weather glyph in front of its name.
+		{'type': 'realtime.text', 'key': 'environment.condition.icon', 'title': False, 'alignment': 'CenterLeft', 'geometry': g(x, 23.6, 2.2, 2.4),
+		 'display': {'valueLabel': {'color': '$muted'}}},
+		{'type': 'realtime.text', 'key': 'environment.condition.condition', 'title': False, 'alignment': 'CenterLeft', 'geometry': g(x + 2.3, 23.6, 7.9, 2.4),
 		 'display': {'valueLabel': {'color': '$muted', 'font': '$body', 'weight': 'Light', 'italic': True, 'matchingGroup': {'group': 'global.detail', 'matchAll': True}}}},
 		text('feels', g(x + 10.2, 23.6, 3.6, 2.4), font='$body', weight='Light', italic=True, color='$faint', align='CenterRight', group='global.detail'),
 		num('environment.temperature.feelsLike', g(x + 14.2, 23.6, 4, 2.4), unit='Inline', hint='00°', weight='SemiBold', align='CenterLeft', group='global.detail'),
@@ -306,6 +310,8 @@ def board(rooms=INDOOR):
 		bar('astronomy.sun.remaining', g(x, 21.2, 18, 2.2), 0, 960, track={'weight': '100%', 'color': '$rule', 'segments': 16, 'gap': '18%'},
 		    fill={'gradient': {0: '$accent', 1: '$warn'}, 'segments': 16, 'gap': '18%', 'weight': '100%', 'glow': GLOW}),
 		*tile('SUNRISE', f'{L}.sunrise', x + 19.8, 2.8, 9.6, '$warn', fmt='%-I:%M', hint='0:00', right=True),
+		text('x', g(x + 21.4, 2.8 + CAP + 1.0, 2.6, TILE), color='$warn', align='CenterRight', icon='wi:sunrise'),
+		text('x', g(x + 21.4, 10.4 + CAP + 1.0, 2.6, TILE), color='$accent', align='CenterRight', icon='wi:sunset'),
 		*tile('SUNSET', f'{L}.sunset', x + 19.8, 10.4, 9.6, '$accent', fmt='%-I:%M', hint='0:00', right=True),
 		*tile('SUN · W/M²', f'{L}.irradiance.irradiance', x + 19.8, 18.0, 9.6, '$warn', hint='000', right=True),
 	]
