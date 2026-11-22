@@ -34,6 +34,8 @@ Floor warning: `pyproject.toml` pins `pyside6 = "^6.6.1"`; CSS `@keyframes` supp
 
 ## General vector libraries
 
+**Approved 2026-11-22: every set here except the brand-logo ones.** `Simple Icons` is excluded (logos, not UI glyphs). Three entries are not packs to install: `Material Symbols` is a font-first upgrade path for the existing `mdi:`, `Font Awesome`'s SVG tree duplicates a pack we already have, and `Iconify` is an aggregator. Approval is not a reason to vendor all of them at once — see the volume note at the end.
+
 Rated by how cleanly they become a pack, not by size.
 
 - [Phosphor](https://github.com/phosphor-icons/core) — 1,512 icons × 6 weights, 256 box, one **filled** single path per file, `currentColor`. Least per-icon work of any candidate; duotone is the only weight with two layers.
@@ -47,7 +49,7 @@ Rated by how cleanly they become a pack, not by size.
 - [Solar](https://github.com/480-Design/Solar-Icon-Set) — 7,330 files in 6 styles; Title Case names with spaces make key derivation painful.
 - [Octicons](https://github.com/primer/octicons) — 416 names × 2 sizes; small, GitHub-flavoured, supplementary.
 - [Ionicons](https://github.com/ionic-team/ionicons) — 1,357 files at a 512 box with `-outline`/`-sharp` suffixes; least uniform of the file sets.
-- [Simple Icons](https://github.com/simple-icons/simple-icons) — brand logos only; useful as a source/plugin badge pack, never a UI set.
+- [Simple Icons](https://github.com/simple-icons/simple-icons) — brand logos only; **excluded from the approved list** (a service badge set, not UI glyphs).
 - [Iconify collections](https://github.com/iconify/icon-sets) — **an aggregator, not a set**: 285 cleaned, validated upstream collections in one JSON format, plus the `chars` map used to generate fonts. Checked against its `collections.md` (2026-11-22): it carries Tabler, Iconoir and Lucide, but **not** Meteocons, QWeather or Phosphor. Value here is the format and the normalisation (monotone colours already rewritten to `currentColor`), not a pack to adopt.
 - [Material Symbols](https://developers.google.com/fonts/docs/material_symbols) — font-first; the repo now ships Android assets, not a canonical SVG tree, so it is an upgrade path for the existing `mdi:` font pack, not an SVG pack.
 - [Font Awesome](https://github.com/FortAwesome/Font-Awesome) — already a font pack here; its `svgs/` tree (2,886 files) would buy render quality at large sizes and nothing else.
@@ -65,12 +67,36 @@ Rated by how cleanly they become a pack, not by size.
 
 Morphing ([Morphicons](https://www.morphicons.com/docs)) stays last: it needs path correspondence, and `QPainterPath.elementCount()` differs per icon, so every part must be resampled to a common polyline before interpolating. Pose animation buys most of the delight for a fraction of that cost. The platform capability behind every animated option is [Qt 6.10's animated vector graphics](https://www.qt.io/blog/animated-vector-graphics-in-qt-6.10) (CSS keyframes in Qt SVG, plus a tech-preview Lottie backend).
 
+## What we clone, and what we skip
+
+Copy these four — the first three are one change, the fourth rides along with the Meteocons import.
+
+1. **Registry shape, from Iconify JSON.** Not the dependency, the data contract: `{prefix, viewBox, icons{name: {body, parts?}}, aliases{parent, rotate, hFlip, vFlip}, chars}`. The transforms in `aliases` are the cheap win — 16 wind directions become one glyph plus `rotate`, and a flipped variant costs an alias, not a second drawing. `chars` replaces the hand-kept private-use tables.
+2. **Colour roles, from SF Symbols.** A glyph is an ordered list of paths, each with a role (`body`, `edge`, `accent`, `shadow`) resolved at paint time against the theme. Four renderings fall out of one rule: monochrome (one colour), hierarchical (one colour, per-layer opacity), palette (N colours, with a documented fallback when more or fewer are given), multicolor (fixed semantic colours plus a tintable filler). Phosphor's duotone is the concrete encoding to imitate first — two paths, secondary at `opacity 0.2`. This is the roadmap's duotone item, and it buys a resolver, not a second render path.
+3. **Stroke width as a number, from Lucide.** One path plus `QPen.setWidthF`, so weight is continuous and free instead of six files per icon. Keep Lucide's `absoluteStrokeWidth` idea too: a stroke that stays constant in pixels when the glyph scales, which matters at the 12–16 px label sizes this dashboard uses. With this axis, Phosphor's six weights collapse to one.
+4. **Part names and poses, from Meteocons.** Preserve the named groups on import (`__Sun`, `__Rays`, `__Cloud_2`); never flatten an SVG to a single path. Qt already plays `animateTransform` and CSS keyframes, so motion costs a frame timer. It also gives pose morphing its parts: interpolate each part's transform against the same part in the next condition.
+
+Borrow the idea, not the code: **kubai** derives one accent into a ramp, an outside stroke and a shadow — we already have that derivation in the theme (`$tokens`, `Color` modifiers), so copy the discipline, not the `feColorMatrix` stack. **fantasticon** is a build step; ours is a Python converter (SVG folder → map), committed, no Node.
+
+Skip, with reasons:
+
+- **Morphicons** — path correspondence. `QPainterPath.elementCount()` differs per icon, so every part needs resampling to a common polyline. Revisit after poses ship.
+- **Lordicon** — a Lottie runtime behind a paywall, and Qt Lottie is QML-only in a QtWidgets app.
+- **Material Symbols' variable axes** — Qt variable-font axis support is per-platform; discrete files are predictable. (Text already has `font-axes`; glyphs do not need it.)
+- **trazo** — its "system" is a colour switch, already covered by the palette rule. It is a sticker set, not an architecture.
+- **Iconify's tooling** — the normalisation is three lines in our converter: fill → `currentColor`, strip the root `width`/`height`, keep the `viewBox`.
+
 ## Adoption order
 
-1. **Vector pack tier, static.** `SvgPack` beside the font packs; Meteocons monochrome and QWeather `currentColor` as the first two, both already single-colour SVG. Also convert the incumbent `wi:` set from its `svg/` folder so existing dashboard values keep working.
+1. **Vector pack tier, static.** `SvgPack` beside the font packs; Meteocons monochrome and QWeather `currentColor` as the first two, both already single-colour SVG. Also convert the incumbent `wi:` set from its `svg/` folder so existing dashboard values keep working. Chip 1 and 3 above land here (registry shape, stroke width).
 2. **Animated poses through `QSvgRenderer`.** No new data model: a pack entry may name an `.svg` whose parts animate, and the item advances `setCurrentFrame` on a display timer. Guard on `animated()` and on the Qt floor.
-3. **Layer/role parts and duotone.** The `parts` list, resolved against theme tokens. This is the roadmap's "duotone / two-color icons" item.
+3. **Layer/role parts and duotone** (chip 2). The `parts` list resolved against theme tokens. This is the roadmap's "duotone / two-color icons" item.
 4. **Pose morphing between conditions.** Interpolate part transforms; only then consider path morphing.
+5. **The approved general sets, one style each.** They are packs of the same tier and cost nothing new once `SvgPack` exists; the reason to sequence them last is volume, not difficulty.
+
+### Volume note
+
+Approving a set is not installing it. The approved general sets hold 2,102 (Lucide) to 7,330 (Solar) files each, and Phosphor is 1,512 icons × 6 weights. Vendor **one style per family** (Phosphor regular, Tabler outline, Remix `-fill`), generate the map with the converter, and keep the whole of each set reproducible by re-running it — do not commit tens of thousands of SVG files to a desktop app's repo.
 
 ## Method and provenance
 
