@@ -304,13 +304,25 @@ items:
         color: $accent
         size: 100%
   - type: realtime.text
-    key: environment.condition.condition
+    key: environment.condition.icon
     title: false
     alignment: CenterLeft
     geometry:
       x: 39.5%
       y: 23.6%
-      width: 10%
+      width: 2.2%
+      height: 2.4%
+    display:
+      valueLabel:
+        color: $muted
+  - type: realtime.text
+    key: environment.condition.condition
+    title: false
+    alignment: CenterLeft
+    geometry:
+      x: 41.8%
+      y: 23.6%
+      width: 7.9%
       height: 2.4%
     display:
       valueLabel:
@@ -624,6 +636,30 @@ items:
       right: 0
       top: 0
       bottom: 0
+  - type: text
+    text: x
+    font: $display
+    weight: Medium
+    color: $warn
+    alignment: CenterRight
+    geometry:
+      x: 89.9%
+      y: 5.3%
+      width: 2.6%
+      height: 3.6%
+    icon: wi:sunrise
+  - type: text
+    text: x
+    font: $display
+    weight: Medium
+    color: $accent
+    alignment: CenterRight
+    geometry:
+      x: 89.9%
+      y: 12.9%
+      width: 2.6%
+      height: 3.6%
+    icon: wi:sunset
   - type: text
     text: SUNSET
     font: Barlow Condensed

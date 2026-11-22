@@ -151,6 +151,11 @@ keys:
   environment.condition.condition:
     value: 3
     type: WeatherCode
+  environment.condition.icon:
+    value: 3
+    type: icon
+    iconType: glyph
+    aliases: '@conditionIcon'
   environment.light.sunrise:
     value: 1782033960
     unit: epoch
