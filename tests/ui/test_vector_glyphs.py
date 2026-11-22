@@ -107,8 +107,126 @@ def _text(dashboard, icon_name):
 	# The dashboard reads state on its own tick; a bare panel needs the pull.
 	item.updateTransform(updatePath=True, reason='test')
 	dashboard.app.processEvents()
-	dashboard.wait_until(lambda: not item.path().isEmpty(), message=f'{icon_name} lays out (text={item.text!r}, icon={item.icon!r})')
+	dashboard.wait_until(
+		lambda: not item.path().isEmpty() or item.__dict__.get('_svgItem') is not None,
+		message=f'{icon_name} lays out (text={item.text!r}, icon={item.icon!r})',
+	)
 	return sandbox, item
+
+
+TWO_TONE = '''
+[tg]
+prefix = "tg"
+name = "Test two-tone"
+default = "line"
+colors = { accent = "$accent" }
+
+[tg.line]
+viewBox = "0 0 24 24"
+
+[tg.line.svg]
+badge = [
+  { d = "M2 2 H22 V14 H2 Z" },
+  { d = "M2 18 H22 V22 H2 Z", role = "accent" },
+]
+'''
+
+
+def _with_pack(tmp_path, monkeypatch, module, body=TWO_TONE):
+	(tmp_path / 'test-two-tone.toml').write_text(body)
+	monkeypatch.setattr(module, '_map_dirs', lambda: (tmp_path, module.IconPack.basePath / 'maps'))
+	return module.discover(force=True)
+
+
+def test_roles_are_separate_paths(tmp_path, monkeypatch):
+	module = icons()
+	try:
+		pack = _with_pack(tmp_path, monkeypatch, module)['tg']
+		icon = pack.getIcon('badge')
+		assert set(icon.unitRoles) == {'body', 'accent'}
+		paths = icon.rolePaths(48.0)
+		assert set(paths) == {'body', 'accent'}
+		assert paths['body'].boundingRect().height() > 5
+		assert paths['accent'].boundingRect().height() > 5
+		assert icon.paintRoles == ('body', 'accent')
+	finally:
+		monkeypatch.undo()
+		module.discover(force=True)
+
+
+def test_a_role_colour_comes_from_the_pack_then_the_theme(tmp_path, monkeypatch):
+	from LevityDash.lib.ui.colors import theme
+	from LevityDash.lib.ui.colors.color import Color
+
+	module = icons()
+	try:
+		pack = _with_pack(tmp_path, monkeypatch, module)['tg']
+		assert pack.roleColor('accent').QColor == Color.role('accent').QColor, 'the pack names $accent'
+		assert pack.roleColor('body').QColor == Color.role('text').QColor, 'an unnamed body takes $text'
+
+		theme.activate({'name': 'glyph-test', 'extends': 'default', 'glyphs': {'tg': {'accent': '#00ff00'}}})
+		assert pack.roleColor('accent').QColor.name() == '#00ff00', 'a theme recolours a pack by name'
+	finally:
+		theme.activate(None)
+		monkeypatch.undo()
+		module.discover(force=True)
+
+
+def test_a_two_tone_glyph_draws_its_accent_as_its_own_item(dashboard, tmp_path, monkeypatch):
+	from LevityDash.lib.ui.colors.color import Color
+
+	module = icons()
+	try:
+		_with_pack(tmp_path, monkeypatch, module)
+		sandbox, item = _text(dashboard, 'tg:badge')
+		try:
+			children = item.__dict__.get('_partItems') or []
+			assert len(children) == 1, 'the accent band is a child with its own brush'
+			assert children[0].brush().color() == Color.role('accent').QColor
+
+			item.setGlyphColorMode('mono')
+			item.updateTransform(updatePath=True, reason='test')
+			dashboard.app.processEvents()
+			assert not item.__dict__.get('_partItems'), 'mono drops the per-role items'
+			assert item.path().boundingRect().height() > 10, 'and the accent band is part of one path'
+			assert item.glyphColorMode == 'mono'
+		finally:
+			if sandbox.scene() is not None:
+				sandbox.scene().removeItem(sandbox)
+	finally:
+		monkeypatch.undo()
+		module.discover(force=True)
+
+
+def test_an_animated_glyph_hosts_a_renderer_and_advances(dashboard):
+	module = icons()
+	glyph = module.getIcon('mxn:clear-day')
+	assert glyph.isAnimated
+	renderer = glyph.renderer('#ffffff')
+	assert renderer.isValid() and renderer.animated(), 'the file animates itself'
+	assert renderer.animationDuration() > 0
+
+	sandbox, item = _text(dashboard, 'mxn:clear-day')
+	try:
+		svg_item = item.__dict__.get('_svgItem')
+		timer = item.__dict__.get('_svgTimer')
+		assert svg_item is not None, 'the animated glyph is a child item'
+		assert timer is not None and timer.isActive(), 'frames are advanced by a timer'
+		start = item._svgFrame
+		dashboard.wait_until(lambda: item._svgFrame != start, timeout=3, message='the animation advances')
+	finally:
+		if sandbox.scene() is not None:
+			sandbox.scene().removeItem(sandbox)
+
+
+def test_a_static_pack_does_not_start_a_timer(dashboard):
+	sandbox, item = _text(dashboard, 'vec:sun')
+	try:
+		assert item.__dict__.get('_svgTimer') is None
+		assert item.__dict__.get('_svgItem') is None
+	finally:
+		if sandbox.scene() is not None:
+			sandbox.scene().removeItem(sandbox)
 
 
 def test_a_vector_icon_lays_out_where_a_font_icon_does(dashboard):

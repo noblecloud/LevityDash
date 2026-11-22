@@ -157,21 +157,47 @@ def _trim(d: str, precision: int) -> str:
 	if precision is None:
 		return d
 	out: List[str] = []
+	_COMMANDS = 'MmLlHhVvCcSsQqTtAaZz'
+	_ARITY = {'M': 2, 'L': 2, 'H': 1, 'V': 1, 'C': 6, 'S': 4, 'Q': 4, 'T': 2, 'A': 7, 'Z': 0}
 	pending_space = False
-	for token in re.split(r'\s*([MmLlHhVvCcSsQqTtAaZz])\s*', d):
-		if not token:
+	command = ''
+	position = 0
+	index = 0
+	length = len(d)
+	while index < length:
+		character = d[index]
+		if character.isspace() or character == ',':
+			index += 1
 			continue
-		if len(token) == 1 and token in 'MmLlHhVvCcSsQqTtAaZz':
-			out.append(token)
+		if character in _COMMANDS:
+			out.append(character)
+			command = character.upper()
+			position = 0
 			pending_space = False
+			index += 1
 			continue
-		for piece in _NUMBER.findall(token):
-			number = f'{round(float(piece), precision):g}'
-			if pending_space and not number.startswith(('-', '.')):
-				out.append(' ')
-			out.append(number)
-			pending_space = True
+		if command == 'A' and position in (3, 4):
+			# An arc's large-arc and sweep flags are *single characters*, so a writer may pack
+			# them as `0022` (flags 0,0 then x=22). Reading that as one number loses an
+			# argument and every later one shifts — the glyph then fails to parse at all.
+			number = character
+			index += 1
+		else:
+			match = _NUMBER.match(d, index)
+			if match is None:
+				index += 1
+				continue
+			number = f'{round(float(match.group()), precision):g}'
+			index = match.end()
+		if pending_space and not number.startswith(('-', '.')):
+			out.append(' ')
+		out.append(number)
+		pending_space = True
+		position += 1
+		if _ARITY.get(command, 0) and position == _ARITY[command]:
+			position = 0
 	return ''.join(out)
+
 
 
 def _part_inline(part: dict) -> str:

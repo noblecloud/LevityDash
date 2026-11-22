@@ -1,6 +1,7 @@
 
-from PySide6.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, Signal, Slot
+from PySide6.QtCore import QLineF, QObject, QPoint, QPointF, QRectF, QTimer, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QFont, QFontInfo, QFontMetricsF, QPainter, QPainterPath, QPainterPathStroker, QPen, Qt, QTransform, QGradient
+from PySide6.QtSvgWidgets import QGraphicsSvgItem
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem
 from datetime import datetime, timedelta
 from dateutil.parser import parser
@@ -423,6 +424,104 @@ class Text(QGraphicsPathItem):
 		"""The item's icon when it is drawn from path data rather than a font character."""
 		icon = self.icon
 		return icon if getattr(icon, 'isVector', False) else None
+
+	#: How a vector glyph's roles become colours. `themed` asks the pack (and the theme's override);
+	#: `mono` draws every role in one colour; `native` keeps the pack's own per-part colours.
+	_glyphColorMode: str = 'themed'
+
+	@property
+	def glyphColorMode(self) -> str:
+		return self._glyphColorMode
+
+	def setGlyphColorMode(self, value: str):
+		mode = str(value or 'themed').strip().lower()
+		if mode not in ('themed', 'mono', 'native'):
+			mode = 'themed'
+		if mode != self._glyphColorMode:
+			self._glyphColorMode = mode
+			self.updateTransform(reason='glyph-color')
+
+	def _applyVectorParts(self, roles: dict, offset):
+		"""Draw the roles that are not `body` as their own items, each with the pack's colour.
+
+		A child item is the cheapest way to fill a second path with a second brush: it inherits
+		the text item's transform, so it scales and rotates with the glyph, and it cannot extend
+		the item's bounds (the body path already defines the box).
+		"""
+		for child in self.__dict__.pop('_partItems', ()):
+			child.setParentItem(None)
+			if child.scene() is not None:
+				child.scene().removeItem(child)
+		if not roles or self._glyphColorMode == 'mono':
+			return
+		icon = self._vectorGlyph()
+		if icon is None:
+			return
+		pack = icon.iconPack
+		items = []
+		for role, role_path in roles.items():
+			colour = pack.roleColor(role)
+			if colour is None:
+				continue
+			child = QGraphicsPathItem(self)
+			child.setPath(role_path.translated(offset))
+			child.setBrush(QBrush(colour.QColor))
+			child.setPen(QPen(Qt.NoPen))
+			child.setZValue({'shadow': -0.5, 'edge': 0.1, 'accent': 0.2}.get(role, 0.0))
+			items.append(child)
+		self._partItems = items
+
+	def _applyAnimatedGlyph(self, glyph, box, offset):
+		"""Host the glyph's own animated SVG in a child item and advance its frames.
+
+		Qt renders SMIL `animateTransform` and CSS `@keyframes` itself, so the whole animation
+		is a renderer plus a timer: no keyframe data, no second renderer tier. The colour is
+		substituted into the file first, because the artwork says `black`.
+		"""
+		self._stopAnimatedGlyph()
+		colour = None
+		brush = self._gradientBrush or self._fillBrush
+		if brush is not None:
+			colour = brush.color().name()
+		else:
+			pack_colour = glyph.iconPack.roleColor('body')
+			colour = pack_colour.QColor.name() if pack_colour is not None else None
+		renderer = glyph.renderer(colour)
+		if not renderer.isValid():
+			log.warning(f'{glyph.iconPack.prefix}:{glyph.name} is not a valid SVG')
+			return
+		item = QGraphicsSvgItem(self)
+		item.setSharedRenderer(renderer)
+		width = renderer.defaultSize().width() or box.width()
+		item.setScale(box.width() / width)
+		item.setPos(offset)
+		self._svgItem = item
+		if not renderer.animated():
+			return
+		fps = renderer.framesPerSecond() or 30
+		frames = max(2, round(renderer.animationDuration() / 1000.0 * fps))
+		self._svgFrame = 0
+		# No parent: a QGraphicsPathItem is not a QObject, so the timer is kept by reference below.
+		timer = QTimer()
+		timer.setInterval(max(16, int(1000.0 / fps)))
+
+		def tick():
+			self._svgFrame = (self._svgFrame + 1) % frames
+			renderer.setCurrentFrame(self._svgFrame)
+			item.update()
+
+		timer.timeout.connect(tick)
+		timer.start()
+		self._svgTimer = timer
+
+	def _stopAnimatedGlyph(self):
+		if (timer := self.__dict__.pop('_svgTimer', None)) is not None:
+			timer.stop()
+			timer.deleteLater()
+		if (item := self.__dict__.pop('_svgItem', None)) is not None:
+			item.setParentItem(None)
+			if item.scene() is not None:
+				item.scene().removeItem(item)
 
 	def _glyphBox(self, font: QFont) -> QRectF:
 		"""Where a vector glyph sits against the baseline: square, a cap height tall, above it."""
@@ -1669,8 +1768,25 @@ class Text(QGraphicsPathItem):
 		fmt_hint_text_path.addPath(self._runPath(fmt_hint_text, font).translated(fmt_text_pos))
 		if (glyph := self._vectorGlyph()) is not None:
 			# A vector glyph is a path, not a character: it fills the box `_glyphBox` reserved.
+			# `body` stays in the item's own path; every other role gets its own brush.
 			box = self._glyphBox(font)
-			path.addPath(glyph.painterPath(box.width()).translated(text_pos.x(), text_pos.y() + box.top()))
+			offset = QPointF(text_pos.x(), text_pos.y() + box.top())
+			parts = {}
+			if getattr(glyph, 'isAnimated', False):
+				# Animated artwork is drawn by a renderer in a child item, not by this path.
+				self._pendingAnimated = (glyph, box, offset)
+			else:
+				roles = glyph.rolePaths(box.width())
+				if self._glyphColorMode == 'mono':
+					merged = QPainterPath()
+					merged.setFillRule(Qt.WindingFill)
+					for role_path in roles.values():
+						merged.addPath(role_path)
+					path.addPath(merged.translated(offset))
+				else:
+					path.addPath(roles.get('body', QPainterPath()).translated(offset))
+					parts = {role: role_path for role, role_path in roles.items() if role != 'body'}
+			self._pendingParts = (parts, offset)
 		else:
 			path.addPath(self._runPath(text, font).translated(text_pos))
 		if tail_font:
@@ -1784,6 +1900,12 @@ class Text(QGraphicsPathItem):
 		self._fmt_rect = fmt_hint_rect
 		# An outline follows every contour, and a font may build a glyph from overlapping ones: merge them first.
 		self.setPath(path.simplified() if self._outline else path)
+		parts, offset = self.__dict__.pop('_pendingParts', ({}, None))
+		self._applyVectorParts(parts, offset)
+		if (animated := self.__dict__.pop('_pendingAnimated', None)) is not None:
+			self._applyAnimatedGlyph(*animated)
+		else:
+			self._stopAnimatedGlyph()
 
 		if update_others and (group := getattr(self, '_sized', None)) is not None:
 			group: 'SizeGroup'

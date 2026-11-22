@@ -25,6 +25,7 @@ that fails raises a typed error naming the closest matches instead of a bare
 """
 import difflib
 import os
+import re
 import shutil
 import zipfile
 from dataclasses import dataclass
@@ -56,9 +57,14 @@ _CHARS = 'chars'
 _SVG = 'svg'
 _VIEWBOX = 'viewBox'
 _STROKE = 'stroke'
+_DIR = 'dir'
+_ANIMATED = 'animated'
 #: Root-table keys that describe the pack rather than a style.
 _META = frozenset({'prefix', 'name', 'default', 'aliases', 'format', 'version', 'also', 'colors', 'colours'})
-_STYLES_KEYS = frozenset({_FONT, _CHARS, _SVG, _VIEWBOX, _STROKE})
+_STYLES_KEYS = frozenset({_FONT, _CHARS, _SVG, _VIEWBOX, _STROKE, _DIR, _ANIMATED})
+
+#: A paint attribute an animated SVG sets literally, which a theme colour then replaces.
+_PAINT_ATTRIBUTE = re.compile(r'(stroke|fill)="(?:black|currentColor|#000000|#000)"')
 
 
 class IconError(Exception):
@@ -144,9 +150,17 @@ class VectorIcon(Icon):
 
 	@cached_property
 	def unitPath(self) -> QPainterPath:
-		"""Every part in the source space: the body, less any cutouts."""
-		body = QPainterPath()
-		body.setFillRule(Qt.WindingFill)
+		"""Every role's geometry in the source space, merged."""
+		merged = QPainterPath()
+		merged.setFillRule(Qt.WindingFill)
+		for path in self.unitRoles.values():
+			merged.addPath(path)
+		return merged
+
+	@cached_property
+	def unitRoles(self) -> Dict[str, QPainterPath]:
+		"""`{role: path}` in the source space, each with the cutouts subtracted."""
+		groups: Dict[str, QPainterPath] = {}
 		cutout = QPainterPath()
 		cutout.setFillRule(Qt.WindingFill)
 		for part in self.parts:
@@ -161,21 +175,41 @@ class VectorIcon(Icon):
 				segment = stroker.createStroke(segment)
 			if part.role == 'cutout':
 				cutout.addPath(segment)
-			else:
-				body.addPath(segment)
-		if cutout.isEmpty():
-			return body
-		return body.subtracted(cutout)
+				continue
+			group = groups.setdefault(part.role or 'body', QPainterPath())
+			group.setFillRule(Qt.WindingFill)
+			group.addPath(segment)
+		if not cutout.isEmpty():
+			for role, group in list(groups.items()):
+				groups[role] = group.subtracted(cutout)
+		if not groups:
+			groups['body'] = QPainterPath()
+		return groups
 
-	def painterPath(self, size: float) -> QPainterPath:
-		"""The glyph scaled into a square `size`, box top-left at (0, 0)."""
+	def _fit(self, size: float) -> QTransform:
+		"""The transform that puts the glyph's box at (0, 0) inside a square of `size`."""
 		width, height = self.viewBox
 		largest = max(width, height) or size
 		scale = size / largest
 		transform = QTransform()
 		transform.translate((size - width * scale) / 2.0, (size - height * scale) / 2.0)
 		transform.scale(scale, scale)
-		return transform.map(self.unitPath)
+		return transform
+
+	def painterPath(self, size: float) -> QPainterPath:
+		"""The glyph scaled into a square `size`, box top-left at (0, 0)."""
+		return self._fit(size).map(self.unitPath)
+
+	def rolePaths(self, size: float) -> Dict[str, QPainterPath]:
+		"""Each role's path in the same box as `painterPath(size)`; `body` is what stays one colour."""
+		transform = self._fit(size)
+		return {role: transform.map(path) for role, path in self.unitRoles.items()}
+
+	@property
+	def paintRoles(self) -> tuple:
+		"""The roles that need their own brush, in paint order."""
+		order = ('body', 'shadow', 'edge', 'accent')
+		return tuple(role for role in order if role in self.unitRoles)
 
 	def advance(self, size: float) -> float:
 		"""The width a glyph of `size` takes on a baseline: its box, square."""
@@ -186,6 +220,49 @@ class VectorIcon(Icon):
 
 	def __hash__(self):
 		return hash((self.iconPack, self.name, self.parts))
+
+
+@dataclass
+class AnimatedIcon(VectorIcon):
+	"""A glyph whose own file animates itself — SMIL `animateTransform` or CSS `@keyframes`.
+
+	Qt plays both, so the glyph is drawn by a `QSvgRenderer` the item advances; there is no
+	path to append. `renderer(colour)` substitutes the theme colour into the file, because the
+	artwork says `black`/`currentColor` and an SVG renderer bakes that in.
+	"""
+
+	file: Optional[Path] = None
+
+	@property
+	def isAnimated(self) -> bool:
+		return True
+
+	def painterPath(self, size: float) -> QPainterPath:
+		return QPainterPath()
+
+	def rolePaths(self, size: float) -> Dict[str, QPainterPath]:
+		return {}
+
+	def renderer(self, colour: Optional[str] = None):
+		"""`QSvgRenderer` for this glyph, with `colour` substituted for the file's paint."""
+		from PySide6.QtCore import QByteArray
+		from PySide6.QtSvg import QSvgRenderer
+
+		if self.file is None:
+			raise IconNotFound(f'{self.iconPack.prefix}:{self.name} has no file')
+		cache = self.__dict__.setdefault('_renderers', {})
+		key = colour or ''
+		if (renderer := cache.get(key)) is not None:
+			return renderer
+		try:
+			markup = Path(self.file).read_text(encoding='utf-8', errors='replace')
+		except OSError as error:
+			raise IconNotFound(f'{self.iconPack.prefix}:{self.name}: {self.file} could not be read ({error})')
+		if colour:
+			markup = _PAINT_ATTRIBUTE.sub(lambda match: f'{match.group(1)}="{colour}"', markup)
+		renderer = QSvgRenderer(QByteArray(markup.encode('utf-8')))
+		cache[key] = renderer
+		return renderer
 
 
 @rich_repr
@@ -269,6 +346,8 @@ class IconPack:
 				entry[_FONT] = _resolve_path(entry[_FONT])
 			if _VIEWBOX in entry:
 				entry[_VIEWBOX] = svgpath.viewBox(entry[_VIEWBOX])
+			if _DIR in entry:
+				entry[_DIR] = _resolve_path(entry[_DIR])
 			if _SVG in entry and isinstance(entry[_SVG], dict):
 				entry[_SVG] = {
 					name: value for name, value in entry[_SVG].items()
@@ -355,6 +434,26 @@ class IconPack:
 		token = self._roles.get(role)
 		return token.lstrip('$') if token else None
 
+	#: What a role falls back to when neither the theme nor the pack names a token.
+	ROLE_TOKENS = {'body': 'text', 'accent': 'accent', 'edge': 'rule', 'shadow': 'surface'}
+
+	def roleColor(self, role: str):
+		"""The colour of `role`: the theme's override for this pack, then the pack's token, then the standard one.
+
+		A theme file may recolour a pack by name — `glyphs: {meteocons: {body: $accent}}` — so a
+		dashboard and a pack can both stay untouched while the theme decides. The result is read
+		through the theme, so it follows a theme switch.
+		"""
+		from LevityDash.lib.ui.colors import theme as _theme
+		from LevityDash.lib.ui.colors.color import Color
+
+		active = _theme.active()
+		for name in (self.prefix, self.name):
+			if (raw := active.glyph(name, role)) is not None:
+				return Color.decode(active.resolve(raw), name=f'${name}.{role}')
+		token = self.roleToken(role) or self.ROLE_TOKENS.get(role)
+		return Color.role(token) if token else None
+
 	def _styleFor(self, name: str, style: Optional[str] = None) -> tuple:
 		"""`(style, char)` for `name`; the requested style first, then any style that has it."""
 		for candidate in self._styleOrder(style):
@@ -432,6 +531,19 @@ class IconPack:
 
 	def _vectorIcon(self, key: tuple, style: str, name: str, markup) -> 'VectorIcon':
 		spec = self.charMap[style]
+		if spec.get(_ANIMATED) and isinstance(markup, str):
+			directory = spec.get(_DIR)
+			file = Path(directory) / markup if directory else Path(markup)
+			if not file.exists():
+				raise IconNotFound(f'{self.prefix}:{name}: {file} does not exist')
+			icon = AnimatedIcon(
+				self, name, '', QFont(),
+				viewBox=spec.get(_VIEWBOX, (24.0, 24.0)),
+				stroke=float(spec.get(_STROKE) or 0.0),
+				file=file,
+			)
+			self._icons[key] = icon
+			return icon
 		default_stroke = float(spec.get(_STROKE) or 0.0)
 		parts = _parts_of(markup, default_stroke)
 		if not parts:

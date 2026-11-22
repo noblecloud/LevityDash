@@ -232,6 +232,20 @@ class Label(Panel, ColorMixin, tag='label'):
 	def icon(self):
 		return not self.textBox.hasDynamicValue
 
+	@StateProperty(key='glyph-color', default='themed', repr=True)
+	def glyphColor(self) -> str:
+		"""How a vector glyph gets its colours: `themed` (the pack and the theme), `mono` (one colour),
+		or `native` (the pack's own palette, once a pack carries one). Font glyphs ignore it."""
+		return self.textBox.glyphColorMode
+
+	@glyphColor.setter
+	def glyphColor(self, value: str):
+		self.textBox.setGlyphColorMode(value)
+
+	@glyphColor.decode
+	def glyphColor(self, value) -> str:
+		return str(value or 'themed').strip().lower()
+
 	@property
 	def defaultIcon(self) -> Icon | None:
 		return self._defaultIcon

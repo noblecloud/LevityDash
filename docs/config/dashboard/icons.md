@@ -13,6 +13,13 @@ LevityDash ships these packs.
 | `qw:` | QWeather Icons | vector, `0 0 16 16` | 507 |
 | `meteo:` | Meteocons (monochrome) | vector, `0 0 128 128` | 519 |
 | `vec:` | Levity Vectors (arrows, sun, moon, cloud, wind, compass, gauge) | vector, `0 0 24 24` | 16 |
+| `mxn:` | Meteocons (animated: SMIL, played by the item) | animated SVG, `0 0 128 128` | 475 |
+| `ph:` | Phosphor (`regular`) | vector, `0 0 256 256` | 1512 |
+| `tb:` | Tabler (`outline`) | vector, `0 0 24 24` | 5491 |
+| `lu:` | Lucide | vector, `0 0 24 24` | 2102 |
+| `io:` | Iconoir (`regular`) | vector, `0 0 24 24` | 1382 |
+| `rx:` | Remix Icon (`fill`) | vector, `0 0 24 24` | 1539 |
+| `bi:` | Bootstrap Icons | vector, `0 0 16 16` | 2078 |
 
 `wi:` and `wiv:` carry the same names from the same project — one font, one set of exported shapes. Keep `wi:` in a value that must not change; use `wiv:` where a vector draws better at size.
 
@@ -115,20 +122,76 @@ Provenance of the three vendored maps:
 | `weather-vector.toml` | https://github.com/erikflowers/weather-icons `svg/` | `bb80982`, 2021-12-13 |
 | `qweather.toml` | https://github.com/qwd/Icons `icons/` | `d7d4ef4`, 2025-12-02 |
 | `meteocons.toml` | `@meteocons/svg-static` (npm), `monochrome/` | 0.1.0 |
+| `meteocons-animated.toml` + `icons/animated/meteocons/` | `@meteocons/svg` (npm), `monochrome/` | 0.1.0 |
+| `phosphor.toml` | https://github.com/phosphor-icons/core `assets/regular/` | `2b75f3ad` |
+| `tabler.toml` | https://github.com/tabler/tabler-icons `icons/outline/` | `85e870d` |
+| `lucide.toml` | https://github.com/lucide-icons/lucide `icons/` | `e00b2b2` |
+| `iconoir.toml` | https://github.com/iconoir-icons/iconoir `icons/regular/` | `39834e3` |
+| `remix.toml` | https://github.com/Remix-Design/RemixIcon `icons/**/*-fill.svg` | `9fb7967` |
+| `bootstrap.toml` | https://github.com/twbs/icons `icons/` | `829d2bc` |
 
 To regenerate one: clone or `npm pack` the source, then run the converter with the prefix, style and `--precision 2` shown above. Nothing calls the converter at runtime, so a map is a build artifact that can be rebuilt at any time from a stated revision.
 
 ### Colour
 
-A vector glyph paints with the item's `color`, or with the theme's `$text` when the item names none. A pack may choose the token its glyphs are drawn in:
+A vector glyph paints with the item's `color`, or with the theme's token when the item names none. Roles decide the rest:
+
+| role | default token | meaning |
+| --- | --- | --- |
+| `body` | `$text` | the glyph itself |
+| `accent` | `$accent` | a second tone — a highlight, a badge, a lit part |
+| `edge` | `$rule` | an outline layer |
+| `shadow` | `$surface` | a backing plate |
+| `cutout` | — | subtracted from the others; it is never painted |
+
+A pack may choose its tokens, and a theme may override a pack by name:
 
 ```toml
 [meteocons]
 prefix = "meteo"
-colors = { body = "$accent" }
+colors = { body = "$accent", accent = "$warn" }
 ```
 
-The token is read through the theme at paint time (`Color.role`), so it follows a theme switch. Items with an explicit `color:` still win.
+```yaml
+# themes/dusk.yaml
+glyphs:
+  meteo: { body: $muted, accent: $accent }
+```
+
+The theme's word wins, then the pack's, then the standard token. All three are read at paint time through `Color.role`, so a theme switch repaints without rebuilding a pack. An item's own `color:` beats all of them.
+
+### `glyph-color`
+
+How a vector glyph asks for its colours:
+
+- `themed` (default) — one token per role, as above. A two-tone glyph draws its `accent` as a child path with its own brush, so it is genuinely two colours.
+- `mono` — every role in the body colour; the glyph becomes one silhouette.
+- `native` — reserved for a pack that carries its own palette; today it behaves as `themed`, because the converter flattens colour into roles.
+
+```yaml
+- type: text
+  text: "x"
+  icon: meteo:clear-day
+  glyph-color: mono
+```
+
+### Animation
+
+A style may point at a folder of SVG files that animate themselves:
+
+```toml
+[meteocons-animated.mono]
+viewBox = "0 0 128 128"
+dir = "{__resources__}/icons/animated/meteocons"
+animated = true
+
+[meteocons-animated.mono.svg]
+clear-day = "clear-day.svg"
+```
+
+The item hosts the file in a `QSvgRenderer` and advances `setCurrentFrame` on a timer at the file's own frame rate. Qt 6 plays SMIL `animateTransform` and CSS `@keyframes`; it does not animate plain attributes (`<animate attributeName="r">` stays still on this build). The item substitutes the theme colour into the SVG's paint before rendering, because a renderer bakes the file's `black` in.
+
+`mxn:` is the shipped example: 475 animated Meteocons. A theme switch re-renders rather than restarting a frame loop, and a static pack starts no timer at all.
 
 <!-- panels:start -->
 
@@ -154,8 +217,10 @@ It does not check glyph coverage with `QFontMetrics.inFont`. That call reports f
 
 ## Limits
 
-- One colour per glyph. A glyph is one fill, so a set whose artwork needs two tones draws flattened; the `role` field is recorded for that work but only `cutout` changes the paint today.
-- No animation yet. Qt plays animated SVG (`@keyframes`, SMIL `animateTransform`), but the item does not advance frames.
-- A font glyph is sized like text; a vector glyph reserves a square one cap height wide. Neither scales independently of the item's font size.
+- A font glyph is sized like text; a vector glyph reserves a square one cap height wide. Neither scales independently of the item's font size, and a vector glyph does not fill the box edge to edge — the artwork's own padding stays.
+- `native` colour mode is a placeholder: the converter records roles, not the pack's original palette.
+- Animation covers what Qt SVG plays (SMIL `animateTransform`, CSS `@keyframes`). SMIL attribute animation and Lottie are not wired.
+- Morphing one glyph into another (the roadmap's Morphicons item) is not implemented; a condition still pops.
+- A two-tone glyph paints its `accent`/`edge`/`shadow` as child items, so an item's hit shape is its body only.
 
 These are what the rest of the glyph brief is for; see [the glyph system brief](../tasks/glyph-system.md).

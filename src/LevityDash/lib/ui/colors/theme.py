@@ -50,7 +50,7 @@ from LevityDash.lib.ui import UILogger
 log = UILogger.getChild('Theme')
 
 #: Token groups a theme file holds.
-GROUPS = ('colors', 'fonts', 'scales', 'sizes')
+GROUPS = ('colors', 'fonts', 'scales', 'sizes', 'glyphs')
 
 #: Keys of a colour modifier mapping, beside ``color``.
 MODIFIERS = frozenset({'alpha', 'lighten', 'darken', 'chroma', 'hue-shift', 'mix'})
@@ -149,6 +149,21 @@ class Theme:
 		return found
 
 	# Section: resolving
+
+	def glyph(self, pack: str, role: str) -> Any:
+		"""The raw value a theme gives a pack's colour `role`, or None.
+
+		Written in a theme file as `glyphs: {meteocons: {body: $accent}}`, so a theme can
+		recolour a pack by name without touching the pack or the dashboard. The value is
+		raw: `$tokens` and colour modifiers work because the caller resolves it.
+		"""
+		theme = self
+		while theme is not None:
+			spec = theme.tokens['glyphs'].get(pack)
+			if isinstance(spec, dict) and role in spec:
+				return spec[role]
+			theme = theme.parent
+		return None
 
 	def resolve(self, value: Any, group: Optional[str] = None, _seen: tuple = ()) -> Any:
 		"""``value`` with every token replaced.

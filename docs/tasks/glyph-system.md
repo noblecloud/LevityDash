@@ -1,10 +1,10 @@
 # The glyph system: more robust, and more than one kind of pack
 
-**Status: open — stage 1 and stage 2 (static) are on `feat/glyph-sets`; motion and two-tone painting remain.**
+**Status: implemented, on `feat/glyph-more` — motion is the one stage left.**
 
-Stage 2 has landed: `lib/ui/svgpath.py` (the whole `d` grammar, arcs to cubics, `transform`), vector styles in a map (`svg` + `viewBox` + `stroke`, single part or a part list with `stroke`/`role`/`transform`), `VectorIcon` with `painterPath(size)` / `advance(size)` and `cutout` subtraction, `Text` drawing it into the same `QPainterPath` it fills for text, the `import_svg_pack.py` converter, and four packs: `vec:` (16 shipped glyphs), `wiv:` (219, weather-icons' own SVG export), `qw:` (507, QWeather), `meteo:` (519, Meteocons monochrome, 1.3 MB at two decimals). Pack colour comes from `[pack.colors]` resolved through `Color.role`, so it follows the theme.
+Implemented: the data-driven pack layer; the vector tier (`svgpath` with the whole `d` grammar, arcs, transforms; `VectorIcon` with parts, roles, cutouts; `Text` drawing the glyph into its own path); the converter; eight generated packs (`wiv:` 219, `qw:` 507, `meteo:` 519, `ph:` 1512, `tb:` 5491, `lu:` 2102, `io:` 1382, `rx:` 1539, `bi:` 2078); animated SVG (`mxn:` 475) hosted in a `QSvgRenderer` with a frame timer; colour by role, with a pack's own token map and a theme override per pack (`glyphs:` in a theme file); `glyph-color: themed | mono | native`; and per-role painting, so a two-tone glyph is two colours.
 
-Still open: per-part painting so `accent`/`edge` roles are more than data, the `glyph-color` modes (`themed`/`mono`/`native`), a theme file recolouring a pack by name, animated SVG frames, and pose morphing.
+Left: morphing one condition into another (roadmap's Morphicons item), `native` colour mode (needs the converter to keep a palette), and SMIL attribute animation / Lottie, which Qt does not play.
 
 A glyph is a named picture an item draws (`icon:` on a `text` item, `icon:` on a `realtime` value label, the pins of a graph). Today every glyph is a Private-Use-Area character in an icon font. That is one kind of pack, and the loader around it assumed there would never be another.
 
