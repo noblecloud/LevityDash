@@ -98,7 +98,20 @@ def _shape_path(element, tag: str) -> Optional[str]:
 	return None
 
 
-def _walk(element, inherited: dict, parts: List[dict], warnings: List[str], name: str):
+def _is_background_plate(element, tag: str, box: Optional[tuple]) -> bool:
+	"""A white shape that covers the whole viewBox is a backdrop, not a knock-out.
+
+	Iconoir's `snapchat` is the case that found this: a `rect` 24×24 filled white under
+	the real path. Treated as a cutout it carves the glyph away to nothing.
+	"""
+	if box is None or tag != f'{_NS}rect':
+		return False
+	_, _, width, height = box
+	return (_num(element, 'x') <= 0 and _num(element, 'y') <= 0
+	        and _num(element, 'width') >= width - 1e-6 and _num(element, 'height') >= height - 1e-6)
+
+
+def _walk(element, inherited: dict, parts: List[dict], warnings: List[str], name: str, box: Optional[tuple] = None):
 	tag = _tag(element)
 	if tag in _SKIP_TAGS:
 		return
@@ -112,6 +125,8 @@ def _walk(element, inherited: dict, parts: List[dict], warnings: List[str], name
 		if not draws_nothing:
 			if fill.startswith('url(') and stroke in ('none', 'transparent'):
 				warnings.append(f'{name}: a shape filled by {fill} is dropped (single-colour glyph)')
+			elif fill in ('white', '#fff', '#ffffff', 'rgb(255,255,255)') and _is_background_plate(element, tag, box):
+				pass  # a backdrop, not a cutout: skipping it is what makes the glyph draw
 			else:
 				part = {'d': ' '.join(data.split())}
 				if fill in ('none', 'transparent'):
@@ -124,7 +139,7 @@ def _walk(element, inherited: dict, parts: List[dict], warnings: List[str], name
 					part['transform'] = ' '.join(element.get('transform').split())
 				parts.append(part)
 	for child in element:
-		_walk(child, style, parts, warnings, name)
+		_walk(child, style, parts, warnings, name, box)
 
 
 def _viewbox_of(root) -> Optional[tuple]:
@@ -231,7 +246,7 @@ def convert(source: Path, prefix: str, name: str, style: str, strip: str, patter
 		if box_for_file is not None:
 			boxes.add(tuple(round(x, 3) for x in box_for_file))
 		parts: List[dict] = []
-		_walk(root, {}, parts, warnings, file.stem)
+		_walk(root, {}, parts, warnings, file.stem, box_for_file)
 		if not parts:
 			warnings.append(f'{file.name}: no drawable shapes; skipped')
 			continue

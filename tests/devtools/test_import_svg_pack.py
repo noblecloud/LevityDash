@@ -53,6 +53,23 @@ def test_a_white_shape_becomes_a_cutout_and_a_transform_is_kept(tmp_path):
 	assert 'translate(6 6)' in transforms
 
 
+def test_a_full_box_white_rect_is_a_background_not_a_cutout(tmp_path):
+	# Iconoir's snapchat: a white 24×24 plate under the real path. As a cutout it would
+	# carve the glyph away; skipped, the glyph draws.
+	source = tmp_path / 'src'
+	source.mkdir()
+	(source / 'plate.svg').write_text(_svg(
+		'<rect width="24" height="24" fill="white"/>'
+		'<path d="M4 12 H20" fill="none" stroke="currentColor" stroke-width="1.5"/>'
+	))
+	out = tmp_path / 'out.toml'
+	import_svg_pack.main([str(source), str(out), '--prefix', 'p'])
+	parts = tomllib.loads(out.read_text())['p']['line']['svg']['plate']
+	parts = parts if isinstance(parts, list) else [{'d': parts}]
+	assert not any(part.get('role') == 'cutout' for part in parts), 'a backdrop is not a cutout'
+	assert any(part.get('stroke') for part in parts), 'the drawn path survives'
+
+
 def test_a_set_with_two_viewboxes_is_refused(tmp_path):
 	source = tmp_path / 'src'
 	source.mkdir()
