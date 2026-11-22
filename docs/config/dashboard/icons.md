@@ -56,6 +56,39 @@ cloud = "0xf013"
 
 A pack that will not parse is logged and skipped. One bad user file cannot stop the window from opening, and the other packs still load.
 
+## Vector packs
+
+A style can carry path data instead of a font. This is the same map file, with an `svg` table and a `viewBox`:
+
+```toml
+[vector.line]
+viewBox = "0 0 24 24"
+stroke = 2
+
+[vector.line.svg]
+sun = 'M12 7 A5 5 0 1 1 12 17 A5 5 0 1 1 12 7 Z M12 1.5 V4 M12 20 V22.5'
+```
+
+- `stroke` is a width in `viewBox` units. Set it for line art (Lucide, Tabler, Iconoir are all stroke-only). The outline is baked into the glyph, so the item still fills it with one brush. Without `stroke`, the path is filled as drawn.
+- A vector glyph is square: it occupies a box one cap height wide and tall, sitting on the baseline, and it takes the item's `color`. It is not a character, so it does not follow `font`, `weight`, or letter spacing.
+- `vec:` ships with the app: `arrow-up`, `arrow-down`, `arrow-left`, `arrow-right`, `plus`, `minus`, `dot`, `ring`, `sun`, `moon`, `cloud`, `rain`, `snow`, `wind`, `gauge-low`, `compass`.
+
+<!-- panels:start -->
+
+<!-- div:left-panel -->
+
+The parser is `lib/ui/svgpath.py` and covers the whole `d` grammar — `M L H V C S Q T A Z`, absolute and relative, implicit repeats, and elliptical arcs converted to cubics. External SVG sets are converted to a map by a script rather than copied file by file; that tooling is next (see the brief).
+
+<!-- div:right-panel -->
+
+```yaml
+- type: text
+  text: "x"
+  icon: vec:wind
+```
+
+<!-- panels:end -->
+
 ## Check a pack
 
 `IconPack.validate()` answers a list of `(style, what, message)` for every mapping the pack cannot serve: a font that will not load, a font file that is missing, a style with no glyphs, an alias that points at a name the pack does not have, an empty `svg` entry. `tests/ui/test_icons.py` runs it for every shipped pack.

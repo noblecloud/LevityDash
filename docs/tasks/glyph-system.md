@@ -1,6 +1,8 @@
 # The glyph system: more robust, and more than one kind of pack
 
-**Status: open — stage 1 on `feat/glyph-system`; stages 2–3 are design.**
+**Status: open — stage 1 and the static half of stage 2 are on `feat/glyph-system`; the rest is designed.**
+
+Stage 2 so far: `lib/ui/svgpath.py` (the whole `d` grammar, arcs converted to cubics), a vector style in the map (`svg` + `viewBox` + `stroke`), `VectorIcon` with `painterPath(size)` / `advance(size)`, and `Text` drawing it into the same `QPainterPath` it fills for text (`_glyphBox`, `_advance`, `_inkRect`, `_leftBearing`, and the append at the value path). A shipped `vec:` pack proves it beside the font packs; `tests/ui/test_vector_glyphs.py` covers the parser, the pack, and a laid-out item. Still open in stage 2: the converter for external sets, per-part painting for two-tone glyphs, and colour roles resolved from the theme.
 
 A glyph is a named picture an item draws (`icon:` on a `text` item, `icon:` on a `realtime` value label, the pins of a graph). Today every glyph is a Private-Use-Area character in an icon font. That is one kind of pack, and the loader around it assumed there would never be another.
 

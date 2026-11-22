@@ -34,11 +34,13 @@ from typing import ClassVar, Dict, Optional, TypeAlias, TypeVar, Union
 from urllib import request
 
 from rich.repr import rich_repr
-from PySide6.QtGui import QFont, QFontMetrics
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QFontMetrics, QPainterPath, QPainterPathStroker, QTransform
 
 from LevityDash import LevityDashboard
 from LevityDash.lib.EasyPath import EasyPath
 from LevityDash.lib.log import LevityLogger
+from LevityDash.lib.ui import svgpath
 
 __dirs__ = LevityDashboard.paths
 __resources__ = LevityDashboard.resources
@@ -52,9 +54,11 @@ CharMap: TypeAlias = _CharMap[_CharMap[_CharMap]]
 _FONT = 'font'
 _CHARS = 'chars'
 _SVG = 'svg'
+_VIEWBOX = 'viewBox'
+_STROKE = 'stroke'
 #: Root-table keys that describe the pack rather than a style.
 _META = frozenset({'prefix', 'name', 'default', 'aliases', 'format', 'version', 'also'})
-_STYLES_KEYS = frozenset({_FONT, _CHARS, _SVG})
+_STYLES_KEYS = frozenset({_FONT, _CHARS, _SVG, _VIEWBOX, _STROKE})
 
 
 class IconError(Exception):
@@ -93,6 +97,10 @@ class Icon:
 		# `None` for a font-only pack rather than the KeyError `wi:` and `mdi:` used to raise here.
 		return self.iconPack.getIconSvg(self.name)
 
+	@property
+	def isVector(self) -> bool:
+		return False
+
 	def __str__(self):
 		return self.unicode
 
@@ -101,6 +109,69 @@ class Icon:
 
 	def __repr__(self):
 		return f'Icon(name={self.iconPack.prefix}:{self.name}, iconPack={self.iconPack!s}, unicode={self.unicode}, style={self.font.styleName()})'
+
+
+@dataclass
+class VectorIcon(Icon):
+	"""A glyph drawn from path data instead of a font character.
+
+	`parts` are `d` strings in the pack's `viewBox`; `roles` names the colour role of
+	each one (`body` today, `accent`/`edge`/`shadow` when a pack carries a second tone).
+	A vector glyph has no `unicode`, so `str()` is empty and callers that lay text out
+	must ask `painterPath()` and `advance()` instead.
+	"""
+
+	parts: tuple = ()
+	viewBox: tuple = (24.0, 24.0)
+	roles: tuple = ()
+	#: Stroke width in `viewBox` units. A stroke-only set (Lucide, Tabler, Iconoir) declares
+	#: one and the outline is baked into the path, so a glyph still fills with one brush.
+	stroke: float = 0.0
+
+	@property
+	def isVector(self) -> bool:
+		return True
+
+	@cached_property
+	def unitPath(self) -> QPainterPath:
+		"""Every part in the source space, as one path."""
+		path = QPainterPath()
+		path.setFillRule(Qt.WindingFill)
+		stroker = None
+		if self.stroke:
+			stroker = QPainterPathStroker()
+			stroker.setWidth(float(self.stroke))
+			stroker.setCapStyle(Qt.RoundCap)
+			stroker.setJoinStyle(Qt.RoundJoin)
+		for part in self.parts:
+			segment = svgpath.parse(part)
+			if stroker is not None:
+				# Stroke-only geometry (Lucide, Tabler, and this pack): the outline is the glyph.
+				# Filling the segments too would turn a drawn circle into a disc.
+				path.addPath(stroker.createStroke(segment))
+			else:
+				path.addPath(segment)
+		return path
+
+	def painterPath(self, size: float) -> QPainterPath:
+		"""The glyph scaled into a square `size`, box top-left at (0, 0)."""
+		width, height = self.viewBox
+		largest = max(width, height) or size
+		scale = size / largest
+		transform = QTransform()
+		transform.translate((size - width * scale) / 2.0, (size - height * scale) / 2.0)
+		transform.scale(scale, scale)
+		return transform.map(self.unitPath)
+
+	def advance(self, size: float) -> float:
+		"""The width a glyph of `size` takes on a baseline: its box, square."""
+		return size
+
+	def __str__(self):
+		return ''
+
+	def __hash__(self):
+		return hash((self.iconPack, self.name, self.parts))
 
 
 @rich_repr
@@ -181,9 +252,13 @@ class IconPack:
 			entry = {k: v for k, v in spec.items() if k in _STYLES_KEYS and k != _CHARS}
 			if _FONT in entry:
 				entry[_FONT] = _resolve_path(entry[_FONT])
+			if _VIEWBOX in entry:
+				entry[_VIEWBOX] = svgpath.viewBox(entry[_VIEWBOX])
+			if _SVG in entry and isinstance(entry[_SVG], dict):
+				entry[_SVG] = {name: value for name, value in entry[_SVG].items() if value}
 			if chars:
 				entry[_CHARS] = chars
-			if chars or _FONT in entry:
+			if chars or _FONT in entry or _SVG in entry:
 				styles[style] = entry
 		return styles
 
@@ -204,7 +279,12 @@ class IconPack:
 	@cached_property
 	def names(self) -> set:
 		if self._names is None:
-			self._names = {name for spec in self.charMap.values() for name in spec.get(_CHARS, {})}
+			self._names = {
+				name
+				for spec in self.charMap.values()
+				for table in (_CHARS, _SVG)
+				for name in spec.get(table, {})
+			}
 		return self._names
 
 	@cached_property
@@ -255,6 +335,13 @@ class IconPack:
 				return candidate, char
 		raise self._missing(name)
 
+	def _svgFor(self, name: str, style: Optional[str] = None) -> tuple:
+		"""`(style, markup)` for a vector glyph, or `(None, None)`."""
+		for candidate in self._styleOrder(style):
+			if (markup := self.charMap[candidate].get(_SVG, {}).get(name)) is not None:
+				return candidate, markup
+		return None, None
+
 	def _styleOrder(self, style: Optional[str] = None) -> tuple:
 		return tuple(dict.fromkeys(x for x in (style, self.defaultStyle, *self.styles) if x in self.charMap))
 
@@ -300,13 +387,35 @@ class IconPack:
 		if (icon := self._icons.get(key)) is not None:
 			return icon
 		resolved = self.resolve_alias(name)
-		style, char = self._styleFor(resolved, style)
+		try:
+			style, char = self._styleFor(resolved, style)
+		except IconNotFound:
+			# No character for that name: a vector pack stores path data instead.
+			vector_style, markup = self._svgFor(resolved, style)
+			if markup is None:
+				raise
+			return self._vectorIcon(key, vector_style, resolved, markup)
 		try:
 			font = self.getFont(style, hasChar=char)
 		except FontNotFoundError:
 			font = self.getFont(style)
 			log.warning(f'{self.prefix}:{resolved} is mapped to {char!r} but no font in the pack loaded; the glyph will not draw')
 		icon = self._icons[key] = Icon(self, resolved, char, font)
+		return icon
+
+	def _vectorIcon(self, key: tuple, style: str, name: str, markup: str) -> 'VectorIcon':
+		spec = self.charMap[style]
+		parts = tuple(svgpath.path_data(markup))
+		if not parts:
+			raise IconNotFound(f'{self.prefix}:{name} has no path data')
+		icon = VectorIcon(
+			self, name, '', QFont(),
+			parts=parts,
+			viewBox=spec.get(_VIEWBOX, (24.0, 24.0)),
+			roles=tuple(['body'] * len(parts)),
+			stroke=float(spec.get(_STROKE) or 0.0),
+		)
+		self._icons[key] = icon
 		return icon
 
 	def validate(self) -> list:
@@ -322,7 +431,7 @@ class IconPack:
 		for style, spec in self.charMap.items():
 			if spec.get(_FONT) and self.metrics.get(style) is None:
 				issues.append((style, _FONT, f'font could not be loaded: {spec[_FONT]}'))
-			if not spec.get(_CHARS):
+			if not spec.get(_CHARS) and not spec.get(_SVG):
 				issues.append((style, _CHARS, 'style has no glyphs'))
 			if spec.get(_FONT) and not Path(spec[_FONT]).exists():
 				issues.append((style, _FONT, f'font file is missing: {spec[_FONT]}'))
