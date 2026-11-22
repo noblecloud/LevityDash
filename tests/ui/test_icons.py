@@ -32,7 +32,10 @@ def test_the_icon_prefix_is_stripped_and_nothing_else_is():
 
 def test_a_bare_name_is_found_in_any_pack():
 	module = icons()
-	assert module.getIcon('home').prefix == 'mdi'
+	# Packs are searched in prefix order, so the answer is the first prefix that has the name.
+	for name in ('home', 'day-sunny'):
+		expected = sorted(prefix for prefix, pack in module.packs().items() if pack.hasName(name))[0]
+		assert module.getIcon(name).prefix == expected, name
 	assert module.getIcon('day-sunny').prefix == 'wi'
 
 
