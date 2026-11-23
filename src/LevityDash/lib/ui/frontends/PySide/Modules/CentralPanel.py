@@ -161,9 +161,17 @@ class CentralPanel(Panel, tag="dashboard"):
 			value = name
 		if self.filePath is None:
 			return False
+		path = self._path(self.filePath)
 		theme.set_override(None)
 		self.theme = value
-		path = self.filePath.path if isinstance(self.filePath, EasyPathFile) else Path(self.filePath)
+		if path is None:
+			return False
+		# A theme change writes the open file, so it follows the same rule as Save: only a file inside
+		# `saves/dashboards/` is written. A reference file elsewhere keeps its own theme on disk; the pick
+		# is in force for this run, and `ThemeMenu.pick` falls back to a run-only override when we say no.
+		if not self.isConfigFile(path):
+			log.info(f'theme {name!r} is in force for this run: {path} is outside saves/dashboards, so it was not written')
+			return False
 		if self._save(path.parent, path.name):
 			return True
 		self.theme = previous
@@ -216,10 +224,11 @@ class CentralPanel(Panel, tag="dashboard"):
 		self._load(self.filePath)
 
 	def reload(self):
-		if self.filePath.exists():
-			self._load(self.filePath)
-		else:
-			QMessageBox.warning(self, "No Dashboard", "There is currently no loaded dashboard to refresh").exec_()
+		path = self._path(self.filePath)
+		if path is not None and path.exists():
+			self._load(path)
+			return
+		QMessageBox.warning(self.scene().window, "No Dashboard", "There is currently no loaded dashboard to refresh")
 
 	def loadItem(self):
 		from LevityDash.lib.ui.frontends.PySide.Modules import PanelFromFile
@@ -288,13 +297,25 @@ class CentralPanel(Panel, tag="dashboard"):
 			log.exception('a save could not restore the variable names; it wrote the values')
 
 	def save(self):
-		self._save()
+		"""Save to the open file, when it lives in the config's `saves/dashboards/`.
 
-	def saveAs(self):
+		Anything else — a reference dashboard in the repo, a file opened from elsewhere — is Save As,
+		pre-filled with the same name under `saves/dashboards/`. The open file is never rewritten in place
+		outside the config folder: writing over `docs/design-references/…` from the menu bar is a surprise,
+		and writing over `default.levity` when the loaded file is not it is a lost dashboard.
+		"""
+		path = self._path(self.filePath)
+		if path is not None and self.isConfigFile(path):
+			if not self._save(path.parent, path.name):
+				QMessageBox.warning(self.scene().window, 'Save Failed', f'Could not write {path}.')
+			return
+		self.saveAs(prefill=path)
+
+	def saveAs(self, prefill: Path | None = None):
 		dateString = datetime.now().strftime('dashboard.%Y.%m.%d.levity')
 		path = userConfig.userPath.joinpath('saves', 'dashboards')
 
-		path = path.joinpath(dateString)
+		path = path.joinpath(prefill.name if prefill is not None else dateString)
 		dialog = QFileDialog(self.parentWidget(), 'Save Dashboard As...', str(path))
 		dialog.setAcceptMode(QFileDialog.AcceptMode.AcceptSave)
 		dialog.setNameFilter("Dashboard Files (*.levity)")
@@ -304,6 +325,21 @@ class CentralPanel(Panel, tag="dashboard"):
 			path = fileName.parent
 			fileName = dialog.selectedFiles()[0].split('/')[-1]
 			self._save(path, fileName)
+
+	@staticmethod
+	def _path(filePath) -> Path | None:
+		"""The file a `filePath` (a `Path`, an `EasyPathFile`, or None) names, as an absolute path."""
+		if filePath is None:
+			return None
+		return Path(filePath.path if isinstance(filePath, EasyPathFile) else filePath).absolute()
+
+	@staticmethod
+	def isConfigFile(path: Path) -> bool:
+		"""Whether `path` is a dashboard in the config's own `saves/dashboards/` folder — the files Save may write in place."""
+		try:
+			return Path(path).absolute().is_relative_to(userConfig.userPath['saves']['dashboards'].path.absolute())
+		except (OSError, KeyError):
+			return False
 
 	def _determine_default_dashboard(self):
 		plugins = LevityDashboard.plugins
@@ -325,18 +361,28 @@ class CentralPanel(Panel, tag="dashboard"):
 		except Exception:
 			return {}
 
-	def _load(self, path: Path = None):
-		name = path.name
-		self.scene().view.parentWidget().setWindowTitle(f"Levity Dashboard - {name}")
-		log.debug(f"Loading dashboard from {str(path)}")
+	def _load(self, path: Path | EasyPathFile | None = None, interactive: bool = True):
+		"""Load a dashboard file.
+
+		`interactive=False` is for a caller that has no user in front of it (the control socket): a missing
+		file raises instead of opening a modal box that nothing would ever close.
+		"""
 		if isinstance(path, EasyPathFile):
 			path = path.path
 		if path is None:
 			self._determine_default_dashboard()
-			path = userConfig.userPath.joinpath('saves', 'dashboards', 'default.levity')
+			path = userConfig.userPath.path.joinpath('saves', 'dashboards', 'default.levity')
+		path = Path(path)
 		if not path.exists():
-			QMessageBox.critical(self.scene().view, "Error", f"Dashboard file not found: {path}").exec_()
+			message = f"Dashboard file not found: {path}"
+			log.error(message)
+			if not interactive:
+				raise FileNotFoundError(message)
+			QMessageBox.critical(self.scene().window, "Error", message)
 			return
+		name = path.name
+		self.scene().view.parentWidget().setWindowTitle(f"Levity Dashboard - {name}")
+		log.debug(f"Loading dashboard from {str(path)}")
 
 		try:
 			with open(path, 'r', encoding='utf-8') as f:
@@ -356,7 +402,8 @@ class CentralPanel(Panel, tag="dashboard"):
 				self._resolved = deepcopy(state)
 		except yaml.YAMLError as error:
 			log.exception(f"Error loading dashboard: {path}\n{error}")
-			QMessageBox.critical(self.scene().window, "Error", f"Error loading dashboard: {path}\n{error}")
+			if interactive:
+				QMessageBox.critical(self.scene().window, "Error", f"Error loading dashboard: {path}\n{error}")
 			raise error
 
 		if self.filePath is None or self.loadedFile != path:
