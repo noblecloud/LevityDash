@@ -78,7 +78,7 @@ Which screen the window opens on, for multi-monitor setups. Accepts:
 
 #### <div class=mono>width/height:</div>
 
-The starting width and height of the window in pixels `px`, percentage `%`, centimeters `cm`, millimeters `mm`, inches `in` or pretty much any length unit supported by unitcorn. For values without a unit, integers are assumed to be
+The starting width and height of the window in pixels `px`, percentage `%`, centimeters `cm`, millimeters `mm`, inches `in` or pretty much any length unit supported by UnitCorn. For values without a unit, integers are assumed to be
 pixels and floats, percentages.
 If provided a real-world measurement like centimeters, the value will be estimated based on the displays reported DPI.
 
@@ -237,10 +237,10 @@ when helping debug issues with someone not accustomed to reading error messages 
 
 The maximum size of the folder where pretty error files are stored. This is only used when `prettyErrors` is `True`. The default is `50mb`.
 
-## unitcorn <!-- {docsify-ignore} -->
+## UnitCorn <!-- {docsify-ignore} -->
 
-The sections below are for unitcorn (formerly WeatherUnits), the library that converts and localizes measurements for display. More information on how it's configured can be found in
-the [unitcorn repo](https://github.com/noblecloud/unitcorn).
+The sections below are for UnitCorn (formerly WeatherUnits), the library that converts and localizes measurements for display. More information on how it's configured can be found in
+the [UnitCorn repo](https://github.com/noblecloud/unitcorn).
 
 ```ini
 [Units]
