@@ -103,6 +103,37 @@ def install_signals():
 		signal.signal(s, signalQuit)
 
 
+#: Returned by `_handOffOrResolveDashboard` when a running window took the file and this process is done.
+_HANDED_OFF = object()
+
+
+def _handOffOrResolveDashboard(dashboard):
+	"""Resolve `--dashboard PATH`, handing it to a running window first.
+
+	Returns the path when this process has to show it itself, None when no `--dashboard` was given (the
+	configured dashboard loads, as before), and `_HANDED_OFF` when a running window took the file and this
+	process should exit instead of starting a second one.
+	"""
+	text = dashboard.parsed_args.dashboard
+	if not text:
+		return None
+	from LevityDash.lib.ui.frontends.PySide.control import handOff, resolveDashboardArgument
+
+	# Resolved against THIS process's working directory: the running window has its own.
+	path = resolveDashboardArgument(text)
+	if not path.is_file():
+		print(f'levitydash: --dashboard {path} is not a file', file=sys.stderr)
+		raise SystemExit(1)
+	reply = handOff({'cmd': 'open', 'dashboard': str(path), 'window': 'current'})
+	if reply is None:
+		return path
+	if reply.get('ok'):
+		print(f"levitydash: {path.name} is showing in the running window ({reply.get('window')})")
+		return _HANDED_OFF
+	print(f"levitydash: the running window refused {path}: {reply.get('error')}", file=sys.stderr)
+	raise SystemExit(1)
+
+
 def main():
 
 	from LevityDash import LevityDashboard
@@ -111,6 +142,10 @@ def main():
 
 	if LevityDashboard.parsed_args.reset_config:
 		reset_config()
+
+	if (dashboard := _handOffOrResolveDashboard(LevityDashboard)) is _HANDED_OFF:
+		return
+	LevityDashboard.dashboardOverride = dashboard
 
 	# git describe (when run from source) is a complete version string
 	# (tag-commitsSince-gHash[-dirty]); fall back to the static version otherwise.

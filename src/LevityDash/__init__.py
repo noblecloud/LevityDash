@@ -148,12 +148,20 @@ class _LevityAppDirs(AppDirs):
 
 class _LevityArgParser(ArgumentParser):
 
+	#: Flags that belong to Qt or to the app but are read by hand elsewhere, so `parse_known_args` leaving
+	#: them over is normal and must not be reported as a typo.
+	PASS_THROUGH = frozenset({'--fullscreen'})
+
 	def __init__(self, *args, **kwargs):
 		kwargs.update(
 			{
 				'prog': "levitydash-cli",
 				'epilog': "For more information, see https://LevityDash.app",
 				'exit_on_error': False,
+				# This parser runs at import time - in the app, in the backend, in pytest, in devtools - so a
+				# prefix may not be matched for you: `--d` would otherwise grab `--dashboard` and a typo that
+				# happened to be a prefix of a real flag would silently change what the app does.
+				'allow_abbrev': False,
 			}
 		)
 		super(_LevityArgParser, self).__init__(*args, **kwargs)
@@ -163,6 +171,11 @@ class _LevityArgParser(ArgumentParser):
 
 	def __add_args(self):
 		self.add_argument('--reset-config', action='store_true', help='Reset the configuration directory to default')
+		self.add_argument(
+			'--dashboard', metavar='PATH', default=None,
+			help='Show this dashboard file instead of the configured one. The configured dashboard is not changed. '
+				 'If LevityDash is already running, the file is handed to that window.',
+		)
 		self.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
 
 	def __add_logging_parsers(self):
@@ -175,7 +188,7 @@ class _LevityDashboard(object):
 
 	__version__ = __version__
 	revision: ClassVar[str | None] = None  # git revision, resolved below when run from source
-	__slots__ = ('app', '__lib', 'config', 'pluginConfig', 'plugins', 'dispatcher',
+	__slots__ = ('app', '__lib', 'config', 'pluginConfig', 'plugins', 'dispatcher', 'dashboardOverride',
 							 'log', 'get_channel', 'get_container', 'clock', 'status_bar', 'splash',
 							 'main_window', 'view', 'plugin_config', 'pluginPool', 'pluginThread',
 							 'main_action_pool', 'main_thread_pool', 'CENTRAL_PANEL', 'scene',
@@ -228,7 +241,14 @@ class _LevityDashboard(object):
 
 	@classmethod
 	def parse_args(cls):
-		cls.parsed_args = cls.args.parse_known_args()[0]
+		import sys  # the module unbinds `sys` at the bottom of the file; a global would be gone by now
+
+		cls.parsed_args, unknown = cls.args.parse_known_args()
+		# Qt owns its own flags and `--fullscreen` is read from argv by hand, so leftovers are normal; a
+		# misspelt option is not, and silence would make it look like the flag was accepted.
+		for arg in unknown:
+			if arg.startswith('--') and arg not in cls.args.PASS_THROUGH:
+				print(f'levitydash: ignoring unknown option {arg!r}', file=sys.stderr)
 
 	def update_args(self):
 		self.args.parse_args()

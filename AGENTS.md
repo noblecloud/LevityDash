@@ -30,6 +30,8 @@ One word per idea, in docs, UI strings and new code. The class `Panel`, `Central
 ```sh
 poetry install                          # install deps (has local dev dep: ../WeatherUnits)
 poetry run LevityDash                   # run desktop app (mode=live by default)
+poetry run LevityDash --dashboard PATH  # show one dashboard file; the configured dashboard is left alone
+                                        # (if the app is already open, the file is handed to that window)
 poetry run LevityDash-backend           # standalone headless backend (WebSocket server)
 poetry run LevityDash-backend-watch     # dev only: debounced restart-on-change, gated on pytest passing
 poetry run pytest                       # run all tests

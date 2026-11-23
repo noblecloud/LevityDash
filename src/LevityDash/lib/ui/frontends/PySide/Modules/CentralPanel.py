@@ -56,10 +56,13 @@ class CentralPanel(Panel, tag="dashboard"):
 
 		self.setAcceptedMouseButtons(Qt.AllButtons)
 
-		defaultDashboardPath = userConfig.dashboardPath
+		# `--dashboard PATH`: show this file, whatever the config says, and never write the config. Set by
+		# `main()` before the app is built; None means the configured dashboard, as before.
+		override = getattr(LevityDashboard, 'dashboardOverride', None)
+		defaultDashboardPath = Path(override) if override is not None else userConfig.dashboardPath
 		try:
 			if defaultDashboardPath is not None:
-				if not defaultDashboardPath.exists():
+				if not defaultDashboardPath.exists() and override is None:
 					# copy the file from _determine_default_dashboard to defaultDashboardPath
 					defaultDashboardPath.parent.mkdir(parents=True, exist_ok=True)
 					copyfile(str(self._determine_default_dashboard()), str(defaultDashboardPath))
@@ -68,6 +71,7 @@ class CentralPanel(Panel, tag="dashboard"):
 				self.filePath = None
 		except FileNotFoundError:
 			self._determine_default_dashboard()
+			self.filePath = None
 		self.loadedFile: Any = None
 
 		self.setFlag(QGraphicsItem.ItemStopsClickFocusPropagation, False)

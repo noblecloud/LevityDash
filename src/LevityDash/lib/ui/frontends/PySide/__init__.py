@@ -47,7 +47,25 @@ class LevityDashApp(QApplication):
 
 		self.main_window.show()
 		self._startScreenshotServer()
+		self._startControlServer()
 		return self.exec_()
+
+	def _startControlServer(self):
+		"""Own the local socket that lets `levitydash --dashboard PATH` show a file in this window.
+
+		Not owning it is not fatal: a socket left behind by a crashed instance is removed before listening,
+		and a machine where `/tmp` is not writable simply has no handoff.
+		"""
+		from LevityDash.lib.utils.shared import connectSignal
+		from .control import socketPath
+		from .control_server import ControlServer
+		self._controlServer = ControlServer(self)
+		if not self._controlServer.listen():
+			qtLogger.warning(f'dashboard handoff is off: could not listen on {socketPath()}')
+			self._controlServer = None
+			return
+		connectSignal(self.aboutToQuit, self._controlServer.close)
+		qtLogger.info(f'dashboard handoff listening on {socketPath()}')
 
 	def _startScreenshotServer(self):
 		from LevityDash.lib.config import userConfig

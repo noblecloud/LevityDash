@@ -61,9 +61,14 @@ def _settle(dashboard):
 		dashboard.app.processEvents()
 
 
-def test_a_picked_theme_is_written_to_the_file_and_comes_back_on_reload(dashboard, tmp_path):
+def test_a_picked_theme_is_written_to_the_file_and_comes_back_on_reload(dashboard):
+	from LevityDash.lib.config import userConfig
+
 	base = dashboard.scene.base
-	path = tmp_path / 'themed.levity'
+	# A file in the config's saves folder: the one place Save (and the theme picker) writes in place.
+	saves = userConfig.userPath['saves']['dashboards'].path
+	saves.mkdir(parents=True, exist_ok=True)
+	path = saves / 'test-themed-theme-pick.levity'
 	path.write_text('items:\n  - type: group\n    name: only\n    geometry: {x: 0%, y: 0%, width: 100%, height: 100%}\n')
 	was = base.filePath
 	try:
@@ -85,6 +90,7 @@ def test_a_picked_theme_is_written_to_the_file_and_comes_back_on_reload(dashboar
 		assert base.setTheme('default') is True
 		assert 'theme' not in yaml.safe_load(path.read_text())
 	finally:
+		path.unlink(missing_ok=True)
 		if was is not None:
 			base.filePath = was
 			base._load(was)
