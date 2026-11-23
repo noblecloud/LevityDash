@@ -32,8 +32,8 @@ UV="$UVENV/bin/uv"
 "$UV" python install "$PYVER"
 PY="$("$UV" python find "$PYVER")"
 
-# unitcorn is a path dependency at ../WeatherUnits (the repo keeps its old name) (develop mode, dev branch).
-WU="$REPO/../WeatherUnits"
+# unitcorn is a path dependency at ../unitcorn (develop mode, dev branch).
+WU="$REPO/../unitcorn"
 if [ ! -d "$WU/.git" ]; then
 	git clone -q https://github.com/noblecloud/unitcorn.git "$WU"
 fi

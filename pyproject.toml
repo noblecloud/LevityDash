@@ -94,7 +94,7 @@ psutil = "^7.2.2"
 "Discussions" = "https://github.com/noblecloud/LevityDash/discussions"
 
 [tool.poetry.group.dev.dependencies]
-unitcorn = { develop = true, path = "../WeatherUnits" }
+unitcorn = { develop = true, path = "../unitcorn" }
 python-semantic-release = "^7.34.6"
 pytest = ">=8.0"
 watchfiles = "^1.0"

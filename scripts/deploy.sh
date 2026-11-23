@@ -6,9 +6,9 @@ REMOTE_HOST="lambda"
 REMOTE_CODE_DIR="~/Code"
 
 LOCAL_LEVITY="/Users/noblecloud/Code/LevityDash"
-LOCAL_WU="/Users/noblecloud/Code/WeatherUnits"
+LOCAL_WU="/Users/noblecloud/Code/unitcorn"
 REMOTE_LEVITY="${REMOTE_CODE_DIR}/LevityDash"
-REMOTE_WU="${REMOTE_CODE_DIR}/WeatherUnits"
+REMOTE_WU="${REMOTE_CODE_DIR}/unitcorn"
 
 # ─── Rsync exclude patterns ──────────────────────────────────────────────────
 # These prevent local test/layout/config changes from overwriting the deployed version.
@@ -130,7 +130,7 @@ post_sync() {
     export PATH="$HOME/.local/bin:$HOME/.poetry/bin:$PATH"
 
     LEVITY_DIR=~/Code/LevityDash
-    WU_DIR=~/Code/WeatherUnits
+    WU_DIR=~/Code/unitcorn
 
     echo "  → Configuring Poetry to use local .venv..."
     poetry config virtualenvs.in-project true --local 2>/dev/null || true
@@ -140,7 +140,7 @@ post_sync() {
     poetry config virtualenvs.in-project true
     poetry install --no-interaction
 
-    echo "  → Installing LevityDash deps (picks up unitcorn from ../WeatherUnits) ..."
+    echo "  → Installing LevityDash deps (picks up unitcorn from ../unitcorn) ..."
     cd "$LEVITY_DIR"
     poetry config virtualenvs.in-project true
     poetry install --no-interaction
