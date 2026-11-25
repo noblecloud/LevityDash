@@ -107,6 +107,23 @@ def install_signals():
 _HANDED_OFF = object()
 
 
+def _resolveDashboard(dashboard):
+	"""Resolve `--dashboard PATH` against this process's working directory; None when no flag was given.
+
+	Resolved here, not in the running window: that window has its own working directory.
+	"""
+	text = dashboard.parsed_args.dashboard
+	if not text:
+		return None
+	from LevityDash.lib.ui.frontends.PySide.control import resolveDashboardArgument
+
+	path = resolveDashboardArgument(text)
+	if not path.is_file():
+		print(f'levitydash: --dashboard {path} is not a file', file=sys.stderr)
+		raise SystemExit(3)  # not_found
+	return path
+
+
 def _handOffOrResolveDashboard(dashboard):
 	"""Resolve `--dashboard PATH`, handing it to a running window first.
 
@@ -114,24 +131,66 @@ def _handOffOrResolveDashboard(dashboard):
 	configured dashboard loads, as before), and `_HANDED_OFF` when a running window took the file and this
 	process should exit instead of starting a second one.
 	"""
-	text = dashboard.parsed_args.dashboard
-	if not text:
+	path = _resolveDashboard(dashboard)
+	if path is None:
 		return None
-	from LevityDash.lib.ui.frontends.PySide.control import handOff, resolveDashboardArgument
+	from LevityDash.lib.ui.frontends.PySide.control import exitCode, handOff
 
-	# Resolved against THIS process's working directory: the running window has its own.
-	path = resolveDashboardArgument(text)
-	if not path.is_file():
-		print(f'levitydash: --dashboard {path} is not a file', file=sys.stderr)
-		raise SystemExit(1)
 	reply = handOff({'cmd': 'open', 'dashboard': str(path), 'window': 'current'})
 	if reply is None:
 		return path
 	if reply.get('ok'):
 		print(f"levitydash: {path.name} is showing in the running window ({reply.get('window')})")
 		return _HANDED_OFF
-	print(f"levitydash: the running window refused {path}: {reply.get('error')}", file=sys.stderr)
-	raise SystemExit(1)
+	failure = reply.get('error')
+	message = failure.get('message') if isinstance(failure, dict) else failure
+	print(f'levitydash: the running window refused {path}: {message}', file=sys.stderr)
+	raise SystemExit(exitCode(reply))
+
+
+def _slug(text: str) -> str:
+	"""A socket-safe name: lowercase, letters and digits, single dashes, short enough for an AF_UNIX path."""
+	slug = ''.join(character if (character.isascii() and character.isalnum()) else '-' for character in text.lower())
+	while '--' in slug:
+		slug = slug.replace('--', '-')
+	return slug.strip('-')[:24].strip('-') or 'window'
+
+
+def _configuredDashboard():
+	"""`[Display] dashboard`, read without starting anything. None when it cannot be read."""
+	try:
+		from LevityDash.lib.config import userConfig
+		return userConfig.dashboardPath
+	except Exception:  # noqa: BLE001 - an unreadable config is not a reason to fail a launch
+		return None
+
+
+def _windowId(dashboard, windowId: str | None = None) -> str:
+	"""The id a second window's socket carries: `--window-id`, else the dashboard's file name, else `w<pid>`."""
+	if windowId:
+		return _slug(windowId)
+	for candidate in (dashboard, _configuredDashboard()):
+		if candidate is not None and (stem := Path(str(candidate)).stem):
+			return _slug(stem)
+	return f'w{os.getpid()}'
+
+
+def _liveMode() -> bool:
+	"""Whether the plugins run in this process (mode=live). Nothing readable means live: the default."""
+	try:
+		from LevityDash.lib.plugins.dispatcher import backend_mode
+		return backend_mode() == 'live'
+	except Exception:  # noqa: BLE001 - a warning is better guessed than skipped
+		return True
+
+
+def warnSecondInstance(socketPath: str) -> None:
+	"""The one line a `--new-instance` window prints in mode=live: two of everything, and that is allowed."""
+	message = (
+		f'--new-instance: a second window on {socketPath}. In mode=live it loads the plugins a second time and '
+		f'polls every API twice; mode=remote shares an already-running backend instead.'
+	)
+	print(f'levitydash: {message}', file=sys.stderr, flush=True)
 
 
 def main():
@@ -143,9 +202,23 @@ def main():
 	if LevityDashboard.parsed_args.reset_config:
 		reset_config()
 
-	if (dashboard := _handOffOrResolveDashboard(LevityDashboard)) is _HANDED_OFF:
-		return
+	if LevityDashboard.parsed_args.new_instance:
+		# No handoff: this process *is* the second window, so `--dashboard` is a file it shows itself.
+		dashboard = _resolveDashboard(LevityDashboard)
+	else:
+		dashboard = _handOffOrResolveDashboard(LevityDashboard)
+		if dashboard is _HANDED_OFF:
+			return
 	LevityDashboard.dashboardOverride = dashboard
+
+	if LevityDashboard.parsed_args.new_instance:
+		from LevityDash.lib.ui.frontends.PySide.control import setSocketId, socketPath
+		# The window that is already running keeps the primary socket; this one answers on its own.
+		setSocketId(_windowId(dashboard, LevityDashboard.parsed_args.window_id))
+		if _liveMode():
+			warnSecondInstance(socketPath())
+		else:
+			print(f'levitydash: second window, control socket {socketPath()}')
 
 	# git describe (when run from source) is a complete version string
 	# (tag-commitsSince-gHash[-dirty]); fall back to the static version otherwise.

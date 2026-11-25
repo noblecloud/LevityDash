@@ -10,7 +10,7 @@ import os
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
-from .control import PROTOCOL_VERSION, dispatch, encode, socketPath
+from .control import PROTOCOL_VERSION, dispatch, encode, error, socketPath
 
 
 class ControlServer(QObject):
@@ -68,7 +68,8 @@ class ControlServer(QObject):
 		try:
 			payload = json.loads(line)
 		except ValueError:
-			reply = {'v': PROTOCOL_VERSION, 'ok': False, 'error': f'request was not JSON: {line[:200]!r}'}
+			# An id-less reply: nothing in the line can be trusted, but the shape still has to match.
+			reply = {'v': PROTOCOL_VERSION, 'ok': False, 'error': error('bad_request', f'request was not JSON: {line[:200]!r}')}
 		else:
 			reply = dispatch(payload)
 		self.requestHandled.emit(reply)

@@ -5,6 +5,20 @@ from ... import UILogger
 qtLogger = UILogger.getChild('Qt')
 
 
+def isNewInstance() -> bool:
+	"""Whether this process was started with `--new-instance` (a second window, not the first one)."""
+	return bool(getattr(getattr(LevityDashboard, 'parsed_args', None), 'new_instance', False))
+
+
+def screenshotPort(port: int, newInstance: bool) -> int:
+	"""The port the debug screenshot server may use: a second instance gets none.
+
+	`--new-instance` drops the server rather than picking another port: nobody can guess which port the
+	second window took, and the server is a debug aid for a window nobody is looking at.
+	"""
+	return 0 if newInstance else port
+
+
 class LevityDashApp(QApplication):
 
 	main_window: 'LevityMainWindow'
@@ -70,7 +84,11 @@ class LevityDashApp(QApplication):
 	def _startScreenshotServer(self):
 		from LevityDash.lib.config import userConfig
 		try:
-			port = userConfig.getOrSet('Debug', 'screenshot-port', 0, userConfig.getint)
+			port = int(userConfig.getOrSet('Debug', 'screenshot-port', 0, userConfig.getint))
+			newInstance = isNewInstance()
+			if port and newInstance:
+				qtLogger.warning(f'screenshots: not started in a second instance - port {port} stays the first window\'s')
+			port = screenshotPort(port, newInstance)
 			if port:
 				from .screenshot import start
 				self._screenshotServer = start(self.main_window, port)

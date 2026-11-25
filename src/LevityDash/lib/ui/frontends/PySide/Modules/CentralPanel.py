@@ -263,12 +263,26 @@ class CentralPanel(Panel, tag="dashboard"):
 
 				YAMLPreprocessor(f)
 				copyfile(f.name, str(path.joinpath(fileName)))
+				self._noteSharedSave(path.joinpath(fileName))
 				log.info('Saved!')
 				return True
 			except Exception if not debug else DebugException as e:
 				log.info('Failed')
 				log.exception(e)
 		return False
+
+	def _noteSharedSave(self, path: Path) -> None:
+		"""One line when a save lands on a file another live window has open.
+
+		Two processes may Save the same file, and last write wins. The other window keeps showing its own copy
+		until it reloads, which is worth a line in the log and nothing more: refusing the save would be worse.
+		"""
+		try:
+			from ..control import otherWindowHasOpen
+			if otherWindowHasOpen(path):
+				log.warning(f'{path.name} is also open in another LevityDash window; this save wins, and that window keeps its own copy until it reloads')
+		except Exception:  # noqa: BLE001 - a log line is never worth failing a save for
+			log.debug('the shared-save check failed', exc_info=True)
 
 	def _dumpedLive(self) -> Any:
 		"""What a save would write now, read back as data: the same shape as the live tree. None if it cannot be made."""
@@ -452,7 +466,19 @@ class CentralPanel(Panel, tag="dashboard"):
 		self.scene().clearSelection()
 		self.scene().view.status = 'Ready'
 		self.scene().view.loadingFinished.emit()
+		self._registerWithPrimary()
 		log.debug(f'Loading Time: {Time.Second(perf_counter() - start):.2f}')
+
+	def _registerWithPrimary(self) -> None:
+		"""A `--new-instance` window keeps the first instance's `status` true about what this one shows.
+
+		Nothing to do in a normal launch: the primary's own window is the first entry of its own `status`. The
+		info dict is built here, on the GUI thread, because it reads the window's title and screen.
+		"""
+		from ..control import announceSecondaryInBackground, socketId, windowInfo
+		if not (id := socketId()):
+			return
+		announceSecondaryInBackground(windowInfo(self, id))
 
 	def setDefault(self):
 		userConfig.dashboardPath = self.loadedFile

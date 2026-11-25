@@ -176,6 +176,15 @@ class _LevityArgParser(ArgumentParser):
 			help='Show this dashboard file instead of the configured one. The configured dashboard is not changed. '
 				 'If LevityDash is already running, the file is handed to that window.',
 		)
+		self.add_argument(
+			'--new-instance', action='store_true',
+			help='Start a second window even when one is already running, instead of handing the file to it. '
+				'The second window gets its own control socket. With mode=live it loads the plugins again.',
+		)
+		self.add_argument(
+			'--window-id', metavar='ID', default=None,
+			help='Name the control socket of a --new-instance window (default: the dashboard file name, else w<pid>).',
+		)
 		self.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
 
 	def __add_logging_parsers(self):
