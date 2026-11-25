@@ -27,6 +27,10 @@ class LevityDashApp(QApplication):
 		from LevityDash.lib.utils.shared import preventAppNap
 		preventAppNap()
 		self.setQuitOnLastWindowClosed(True)
+		# One theme per process, decided before the first dashboard decodes a `$token`: a workspace's `theme:`,
+		# else the first window's dashboard theme, which every other window then follows.
+		from . import workspace
+		workspace.applyTheme()
 		self.main_window = LevityMainWindow()
 		iconPath = LevityDashboard.resources / 'ui-elements' / 'icon.icns'
 		icon = QIcon(iconPath.as_posix())
@@ -37,6 +41,12 @@ class LevityDashApp(QApplication):
 		QApplication.setOrganizationName('LevityDash')
 		QApplication.setOrganizationDomain('LevityDash.app')
 		connectSignal(self.aboutToQuit, LevityDashboard.plugins.stop)
+		connectSignal(self.aboutToQuit, self._finishWorkspace)
+		# `close` over the control socket closes this window, deferred past the reply the client is owed.
+		from PySide6.QtCore import QTimer
+		from .control import setCloseWindow
+
+		setCloseWindow(lambda: QTimer.singleShot(0, self.main_window.close))
 		from LevityDash.lib.config import userConfig
 		if userConfig.getOrSet('QtOptions', 'keepAwake', False, userConfig.getboolean):
 			from LevityDash.lib.utils.keepawake import startKeepAwake, stopKeepAwake
@@ -63,6 +73,22 @@ class LevityDashApp(QApplication):
 		self._startScreenshotServer()
 		self._startControlServer()
 		return self.exec_()
+
+	def _finishWorkspace(self):
+		"""On quit: write this window's geometry back, and, as the primary, ask the windows it started to close.
+
+		The children are asked *first*: each writes its own entry on the way out, so the file's last write has
+		every window in it. A window that will not close within 3 s is left running and named in the log.
+		"""
+		from . import control, workspace
+
+		if control.socketId() is None:
+			# Only the process that spawned the children closes them; a child has none.
+			workspace.closeChildren()
+		try:
+			workspace.saveFromWindow(self.main_window)
+		except Exception as e:  # noqa: BLE001 - a write-back that fails must never hold up quitting
+			qtLogger.warning(f'workspace geometry not written back: {e}')
 
 	def _startControlServer(self):
 		"""Own the local socket that lets `levitydash --dashboard PATH` show a file in this window.

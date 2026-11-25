@@ -182,6 +182,34 @@ class _LevityArgParser(ArgumentParser):
 				'The second window gets its own control socket. With mode=live it loads the plugins again.',
 		)
 		self.add_argument(
+			'--workspace', metavar='NAME_OR_PATH', default=None,
+			help='Open a workspace: window 1 in this process, one child process per remaining window. A name is '
+			     'read from <config>/workspaces/<name>.yaml. [Display] dashboard is not changed.',
+		)
+		self.add_argument(
+			'--window', metavar='PATH', action='append', default=None,
+			help='Show one dashboard in a window of its own, one process per --window, in the order given. An '
+			     'unsaved workspace: no geometry, no ids. Cannot be combined with --workspace.',
+		)
+		self.add_argument(
+			'--screen-name', metavar='NAME', default=None,
+			help='Open on the screen with this name (a workspace window passes the name its file gives).',
+		)
+		self.add_argument(
+			'--screen-fallback', metavar='NAME_OR_PRIMARY', default=None,
+			help='The screen to use when --screen-name is not attached (default: primary).',
+		)
+		self.add_argument(
+			'--geometry', metavar='X,Y,WIDTH,HEIGHT', default=None,
+			# argparse formats help strings, so a literal percent has to be doubled.
+			help='Place the window at these fractions of the screen\'s available geometry, or percentages '
+			     '("0,0,100%%,100%%").',
+		)
+		self.add_argument(
+			'--mode', choices=('windowed', 'fullscreen', 'kiosk'), default=None,
+			help='How the window opens: windowed, fullscreen, or kiosk (frameless, filling the screen).',
+		)
+		self.add_argument(
 			'--window-id', metavar='ID', default=None,
 			help='Name the control socket of a --new-instance window (default: the dashboard file name, else w<pid>).',
 		)

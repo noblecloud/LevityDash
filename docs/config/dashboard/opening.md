@@ -65,9 +65,10 @@ turns it into an exit status so a script does not have to read the message:
               "dashboard": "/Users/me/desk.levity", "screen": "Built-in Retina Display", "pid": 4112}]}
 ```
 
-`list`, `focus`, `close`, `move` and `workspace` answer `not_implemented`: the names are reserved for the
-multi-window protocol and carry no work yet. `open`'s `window` accepts `current` or `main` for the one window
-this process has; `new` answers `not_implemented` — a second window is a second process, below.
+`close` closes one window by id (`current`, `main`, or the id of a window registered with this one), and
+`workspace` answers the layout this window belongs to — see below. `list`, `focus` and `move` answer
+`not_implemented`: the names are reserved and carry no work yet. `open`'s `window` accepts `current` or `main`
+for the window this process has; `new` answers `not_implemented` — a second window is a second process, below.
 
 ## A second window
 
@@ -90,6 +91,97 @@ Two windows are two processes:
   reloads.
 - The **screenshot server** (`[Debug] screenshot-port`) is off in a second instance: the port belongs to the
   first window, and nobody can guess the second one it would have picked.
+
+## A workspace: one file, several windows
+
+A **workspace** is the unit of a multi-window layout: one YAML file listing the windows, the dashboard each
+shows, the monitor it goes on and where. It lives in `<config>/workspaces/<name>.yaml`.
+
+```yaml
+name: desk                 # optional, defaults to the file's stem
+theme: dusk                # optional: the one theme the whole layout uses
+windows:
+  - id: main               # stable, unique in the file; it is the window's control socket id
+    dashboard: home.levity # <config>/saves/dashboards, then the current directory, or absolute
+    screen: {name: "DELL U2720Q", fallback: primary}
+    geometry: {x: 0, y: 0, width: 50%, height: 100%}   # fractions of that screen's available area
+    mode: windowed         # windowed | fullscreen | kiosk
+  - id: right
+    dashboard: /Users/me/tower.levity
+    screen: {name: "Side Monitor", fallback: primary}
+    geometry: {x: 0.5, y: 0, width: 0.5, height: 1}
+```
+
+```sh
+poetry run LevityDash --workspace desk              # a name in <config>/workspaces/
+poetry run LevityDash --workspace ./desk.yaml       # or a path
+poetry run LevityDash --window home.levity --window tower.levity   # the same thing, unsaved
+```
+
+Window 1 opens in the process you started; each remaining window is a child process
+(`python -m LevityDash --new-instance --window-id <id> --dashboard <path>`, plus `--screen-name`, `--geometry`
+and `--mode` when the file gives them), so every window keeps its own control socket, as `--new-instance`
+already does. A child that exits is logged once and not restarted.
+
+`--window PATH` may be repeated to build an unsaved workspace in memory: one process per path, in the order
+given, with no ids and no geometry to remember. It cannot be combined with `--workspace`, and it is refused
+(`bad_request`, exit 4) rather than guessed at.
+
+`[Display] workspace` in `config.ini` names a workspace to open when no flag says otherwise. It is only a
+default: `--dashboard`, `--window` or `--workspace` all win over it, and `[Display] dashboard` still means the
+single window you get with no flags at all.
+
+The file is validated strictly. An unknown key is an error that names the key — `unknown key 'position';
+known: id, dashboard, screen, geometry, mode` — as is a duplicate `id`, a `geometry` value that is not a
+fraction or a percentage, and a `mode` that is not one of the three.
+
+### Screens, geometry and kiosk
+
+- `screen.name` is the name `QGuiApplication.screens()` reports, exactly as the operating system spells it. A
+  name that is not attached falls back to `screen.fallback` (`primary` by default); the **file keeps the saved
+  name**, so plugging the monitor back in restores the layout instead of leaving it on whatever was attached.
+  The name is only rewritten when the window is actually moved to another monitor.
+- `geometry` is fractions of that screen's available area (`0.5`) or percentages (`50%`), clamped so a layout
+  written on a bigger monitor still lands on screen. A window with no `geometry` is sized as usual.
+- `mode: kiosk` is frameless at the screen's full geometry — no title bar, no menu, nothing of the desktop.
+  `mode: fullscreen` keeps the frame and takes the available area. Neither is decided by the "this looks
+  nearly fullscreen" heuristic, which still applies to a window no file places.
+
+### What is remembered, and when
+
+On quit each window writes its own `screen` and `geometry` back into the file, in the window's own process,
+re-reading the file first so two windows do not clobber each other. Nothing else is ever written: windows are
+not added or removed, `dashboard` is not rewritten, and `mode` stays as authored. A workspace file deleted
+while the app is open is reported in one line and nothing is written.
+
+Quitting the primary asks the windows it started to close (the same as `control close ID`) and waits at most
+three seconds for them; a window that does not answer is left running and named in the log.
+
+### Theme
+
+A layout has one theme, never one per window and never one per focus. `theme:` in the file wins; without one,
+the first window's dashboard theme wins. A window whose dashboard names a different theme logs one line —
+`paper theme ignored: the workspace uses dusk` — and uses the layout's.
+
+### Asking who is there
+
+```sh
+poetry run python -m LevityDash.lib.ui.frontends.PySide.control workspace
+```
+
+```json
+{"v": 2, "ok": true,
+ "workspace": "/Users/me/Library/Application Support/LevityDash/workspaces/desk.yaml",
+ "name": "desk",
+ "windows": [{"id": "main", "pid": 4112, "screen": "DELL U2720Q",
+              "geometry": {"x": 0.0, "y": 0.0, "width": 0.5, "height": 1.0}, "mode": "windowed"},
+             {"id": "right", "pid": 4127, "screen": "Side Monitor",
+              "geometry": {"x": 0.5, "y": 0.0, "width": 0.5, "height": 1.0}, "mode": "windowed"}]}
+```
+
+`workspace` is `null` and `name` is the window's id when no workspace file is open, so the shape does not
+depend on how the app was started. `control status` on the primary lists the same windows with their titles
+and dashboards; `control close right` closes one of them.
 
 ## What Save writes
 

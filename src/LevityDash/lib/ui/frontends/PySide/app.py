@@ -71,6 +71,36 @@ __pdoc__ = {
 FULLSCREEN_SIMILARITY_THRESHOLD = 0.95
 
 
+def _launchScreen(launch) -> QScreen | None:
+	"""The screen a workspace window (or `--screen-name`) names, or None when nothing names one.
+
+	A saved name that is not attached opens on the fallback — `primary` unless the file names another — and the
+	file keeps the saved name, so replugging the monitor restores the layout instead of the layout drifting to
+	whatever was attached at the time.
+	"""
+	from . import workspace
+
+	if launch is None or launch.screen is None:
+		return None
+	screens = QApplication.screens()
+	names = [screen.name() for screen in screens]
+	chosen = workspace.chooseScreen(launch.screen, names)
+	if launch.screen.name not in names:
+		guiLog.info(f'screen {launch.screen.name!r} is not attached; opening on {chosen!r}')
+	if chosen == 'primary' or chosen is None:
+		return QApplication.primaryScreen()
+	for screen in screens:
+		if screen.name() == chosen:
+			return screen
+	return QApplication.primaryScreen()
+
+
+def availableRect(screen: QScreen) -> tuple[int, int, int, int]:
+	"""A screen's available geometry as a plain tuple, which is what the Qt-free workspace code takes."""
+	geometry = screen.availableGeometry()
+	return geometry.x(), geometry.y(), geometry.width(), geometry.height()
+
+
 def shouldStartFullscreen(fullscreen: bool, isExplicit: bool, forcedByArgv: bool, similarity: float) -> bool:
 	"""Decide whether the main window opens fullscreen.
 
@@ -1199,6 +1229,8 @@ class LevityMainWindow(QMainWindow):
 		# monitor needs its own, or its geometry and DPI stay those of the screen it started on.
 		if (handle := self.windowHandle()) is not None:
 			handle.screenChanged.connect(self.view.handleScreenChange)
+			# A window moved to another monitor is the one thing that may rewrite a workspace's screen name.
+			handle.screenChanged.connect(self._noteScreenMoved)
 
 		if platform.system() != 'Darwin':
 			self.updateMenuBar('show')
@@ -1224,6 +1256,38 @@ class LevityMainWindow(QMainWindow):
 		grid.addWidget(view, 0, 0)
 		self.canvasLayer.bind()
 		return holder
+
+	def workspaceRecord(self) -> dict:
+		"""This window's screen, geometry and mode in the shape a workspace file stores them.
+
+		Read on quit, and by the `workspace` control command. The saved screen name is kept while the window has
+		not been moved: a monitor that was not attached at launch is still the one the layout asks for, and the
+		fallback it opened on is not written in its place.
+		"""
+		from . import workspace
+
+		screen = self.screen() or QApplication.primaryScreen()
+		if screen is None:
+			return {}
+		geometry = workspace.Geometry.fractions(
+			(self.x(), self.y(), self.width(), self.height()),
+			availableRect(screen),
+		)
+		plan = workspace.launch()
+		name = screen.name()
+		if plan is not None and plan.screen is not None and not getattr(self, '_screenMoved', False):
+			name = plan.screen.name
+		return {'screen': name, 'geometry': geometry, 'mode': self.workspaceMode()}
+
+	def workspaceMode(self) -> str:
+		"""`kiosk`, `fullscreen` or `windowed`, as this window is now."""
+		if getattr(self, '_workspaceKiosk', False):
+			return 'kiosk'
+		return 'fullscreen' if self.isFullScreen() else 'windowed'
+
+	def _noteScreenMoved(self, *args) -> None:
+		"""The window went to another monitor: only now may the workspace file's screen name change."""
+		self._screenMoved = True
 
 	def _initConnectionIndicator(self):
 		# Only meaningful in mode=remote - mode=live has no backend
@@ -1254,8 +1318,13 @@ class LevityMainWindow(QMainWindow):
 			except ValueError:
 				fullscreen = False
 
+		from . import workspace
+
 		g = self.geometry()
-		screen: QScreen = findScreen()
+		# A workspace window (or `--screen-name`) is on the monitor its file names; everything else is on the
+		# configured `[Display] display`, as before.
+		launch = workspace.launch()
+		screen: QScreen = _launchScreen(launch) or findScreen()
 		guiLog.debug(f'Using screen {screen!r}')
 		screenGeometry = screen.geometry()
 		width = parseSize(userConfig.getOrSet('Display', 'width', '80%'), 0.8, dimension=DimensionType.width)
@@ -1292,11 +1361,28 @@ class LevityMainWindow(QMainWindow):
 
 		g.setSize(QSize(round(width), round(height)))
 		g.moveCenter(screen.availableGeometry().center())
+		# The file's geometry wins over the size above, which is only the default it replaces.
+		if launch is not None and launch.geometry is not None:
+			g = QRect(*launch.geometry.pixels(availableRect(screen)))
 		self.setGeometry(g)
 
 		similarity = (g.width() / screen.availableSize().width() + g.height() / screen.availableSize().height()) / 2
 
-		if shouldStartFullscreen(
+		if launch is not None and launch.mode == 'kiosk':
+			# Kiosk: no frame, and the screen's *geometry* rather than its available area, so nothing of the
+			# desktop shows. There is no window title and no menu; the way out is closing the process.
+			self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+			self.setGeometry(screen.geometry())
+			self._workspaceKiosk = True
+			guiLog.debug('Starting kiosk')
+		elif launch is not None and launch.mode is not None:
+			# The file says how the window opens, so the "this looks nearly fullscreen" heuristic is not a vote.
+			if launch.mode == 'fullscreen':
+				guiLog.debug('Starting fullscreen (a workspace file says so)')
+				self.showFullScreen()
+			else:
+				guiLog.debug(f'Starting windowed (a workspace file places it: {g.x()},{g.y()} {g.width()}x{g.height()})')
+		elif shouldStartFullscreen(
 			fullscreen=fullscreen,
 			isExplicit=fullscreenIsExplicit,
 			forcedByArgv='--fullscreen' in sys.argv,

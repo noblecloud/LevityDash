@@ -51,6 +51,7 @@ longitude = -76.1
 ```ini
 [Display]
 dashboard = default.levity
+workspace = 
 frontend = Qt
 fullscreen = False
 width = 90%
@@ -60,6 +61,12 @@ height = 600px
 ### <div class=mono>dashboard</div>
 
 The file name or path of the default dashboard.
+
+### <div class=mono>workspace</div>
+
+Optional. A workspace name (in `<config>/workspaces/`) or path to open when no `--dashboard`, `--window` or
+`--workspace` flag says otherwise. `dashboard` above is untouched by it: with no workspace set, a launch is
+still the one window `dashboard` names. See [Opening a dashboard](config/dashboard/opening.md).
 
 ### <div class=mono>frontend</div> 
 

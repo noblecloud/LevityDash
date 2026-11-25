@@ -106,6 +106,16 @@ def install_signals():
 #: Returned by `_handOffOrResolveDashboard` when a running window took the file and this process is done.
 _HANDED_OFF = object()
 
+#: The exit statuses this file returns itself, matching `control.EXIT_CODES` (a launch error is not a reply).
+_NOT_FOUND = 3
+_BAD_REQUEST = 4
+
+
+def _fail(message: str, code: int) -> None:
+	"""Report a launch this process will not carry out, and exit with the status the protocol would use."""
+	print(f'levitydash: {message}', file=sys.stderr)
+	raise SystemExit(code)
+
 
 def _resolveDashboard(dashboard):
 	"""Resolve `--dashboard PATH` against this process's working directory; None when no flag was given.
@@ -149,11 +159,14 @@ def _handOffOrResolveDashboard(dashboard):
 
 
 def _slug(text: str) -> str:
-	"""A socket-safe name: lowercase, letters and digits, single dashes, short enough for an AF_UNIX path."""
-	slug = ''.join(character if (character.isascii() and character.isalnum()) else '-' for character in text.lower())
-	while '--' in slug:
-		slug = slug.replace('--', '-')
-	return slug.strip('-')[:24].strip('-') or 'window'
+	"""A socket-safe name: lowercase, letters and digits, single dashes, short enough for an AF_UNIX path.
+
+	The implementation is `workspace.slug`, so the id a workspace file writes is the id its child's socket
+	carries without either side slugging it differently.
+	"""
+	from LevityDash.lib.ui.frontends.PySide.workspace import slug
+
+	return slug(text)
 
 
 def _configuredDashboard():
@@ -193,28 +206,121 @@ def warnSecondInstance(socketPath: str) -> None:
 	print(f'levitydash: {message}', file=sys.stderr, flush=True)
 
 
+def _workspaceText(args) -> str | None:
+	"""`--workspace`, else `[Display] workspace` — read only when no other flag names what to show."""
+	if text := getattr(args, 'workspace', None):
+		return str(text)
+	if getattr(args, 'window', None) or getattr(args, 'dashboard', None):
+		# A flag is an explicit answer to "what do I show"; the configured workspace is only the default.
+		return None
+	try:
+		from LevityDash.lib.config import userConfig
+		return userConfig.get('Display', 'workspace', fallback=None) or None
+	except Exception:  # noqa: BLE001 - an unreadable config is not a reason to fail a launch
+		return None
+
+
+def _resolveWorkspace(dashboard):
+	"""The layout this launch opens, or None when it is an ordinary one-window launch.
+
+	`--workspace` (or `[Display] workspace`) is a file of windows; repeated `--window` is the same thing built
+	in memory. Both at once is refused: one file and a list of paths cannot both be the layout.
+	"""
+	from LevityDash.lib.ui.frontends.PySide import workspace
+
+	args = dashboard.parsed_args
+	if getattr(args, 'workspace', None) and getattr(args, 'window', None):
+		_fail('--workspace and --window cannot be used together: a workspace file already names its windows', _BAD_REQUEST)
+	if paths := getattr(args, 'window', None):
+		from LevityDash.lib.ui.frontends.PySide.control import resolveDashboardArgument
+
+		try:
+			return workspace.fromPaths([resolveDashboardArgument(text) for text in paths])
+		except workspace.WorkspaceError as error:
+			_fail(f'--window: {error}', _BAD_REQUEST)
+	text = _workspaceText(args)
+	if not text:
+		return None
+	path = workspace.resolve(text)
+	if not path.is_file():
+		_fail(f'--workspace {text!r}: {path} is not a file', _NOT_FOUND)
+	try:
+		return workspace.load(path)
+	except workspace.WorkspaceError as error:
+		_fail(f'--workspace {text!r}: {error}', _BAD_REQUEST)
+
+
+def _openWorkspace(active) -> None:
+	"""Window 1 in this process, one child per remaining window, and the one theme the layout uses.
+
+	`[Display] dashboard` is not read and not written: a workspace is what this run shows.
+	"""
+	from LevityDash import LevityDashboard
+	from LevityDash.lib.ui.frontends.PySide import workspace
+
+	first = active.windows[0]
+	workspace.setActive(active)
+	workspace.setLaunch(workspace.Launch.fromWindow(first))
+	# The file's theme, else the first window's dashboard theme, which every other window then follows.
+	workspace.setTheme(active.theme or workspace.dashboardTheme(workspace.dashboardPath(first.dashboard)))
+	LevityDashboard.dashboardOverride = workspace.dashboardPath(first.dashboard)
+	rest = active.windows[1:]
+	print(f'levitydash: workspace {active.name!r}: window {first.id!r} here, {len(rest)} more window(s)', flush=True)
+	for window in rest:
+		workspace.spawn(window, workspacePath=active.path)
+
+
+def _workspaceEntry(args) -> None:
+	"""A workspace child: the file's entry for its id, or what its flags say when the file has none."""
+	from LevityDash.lib.ui.frontends.PySide import workspace
+
+	active = workspace.active()
+	entry = active.window(getattr(args, 'window_id', None)) if active is not None else None
+	plan = workspace.Launch.fromWindow(entry) if entry is not None else workspace.Launch.fromFlags(args)
+	if plan is not None:
+		workspace.setLaunch(plan)
+
+
 def main():
 
 	from LevityDash import LevityDashboard
 
 	LevityDashboard.parse_args()
+	args = LevityDashboard.parsed_args
 
-	if LevityDashboard.parsed_args.reset_config:
+	if args.reset_config:
 		reset_config()
 
-	if LevityDashboard.parsed_args.new_instance:
+	from LevityDash.lib.ui.frontends.PySide import workspace
+
+	if workspace.attachFromEnvironment() is not None:
+		# A workspace child: one window of a file that is already open, its entry named by --window-id.
+		LevityDashboard.dashboardOverride = _resolveDashboard(LevityDashboard)
+		workspace.setTheme(workspace.themeFromEnvironment())
+		_workspaceEntry(args)
+	elif (active := _resolveWorkspace(LevityDashboard)) is not None:
+		# A workspace is a layout, not a file to hand to a running window: it opens here.
+		_openWorkspace(active)
+	elif args.new_instance:
 		# No handoff: this process *is* the second window, so `--dashboard` is a file it shows itself.
-		dashboard = _resolveDashboard(LevityDashboard)
+		LevityDashboard.dashboardOverride = _resolveDashboard(LevityDashboard)
+		workspace.setLaunch(workspace.Launch.fromFlags(args))
 	else:
 		dashboard = _handOffOrResolveDashboard(LevityDashboard)
 		if dashboard is _HANDED_OFF:
 			return
-	LevityDashboard.dashboardOverride = dashboard
+		LevityDashboard.dashboardOverride = dashboard
+		plan = workspace.Launch.fromFlags(args)
+		if plan is not None:
+			workspace.setLaunch(plan)
 
-	if LevityDashboard.parsed_args.new_instance:
-		from LevityDash.lib.ui.frontends.PySide.control import setSocketId, socketPath
+	if args.new_instance:
+		from LevityDash.lib.ui.frontends.PySide.control import setSocketId, socketId, socketPath
 		# The window that is already running keeps the primary socket; this one answers on its own.
-		setSocketId(_windowId(dashboard, LevityDashboard.parsed_args.window_id))
+		setSocketId(_windowId(LevityDashboard.dashboardOverride, args.window_id))
+		if (plan := workspace.launch()) is not None:
+			# The id a client writes is the id this window answers to, however the file or the flag spelled it.
+			plan.windowId = socketId() or plan.windowId
 		if _liveMode():
 			warnSecondInstance(socketPath())
 		else:

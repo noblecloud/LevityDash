@@ -11,11 +11,24 @@ Protocol — one newline-delimited JSON object each way::
     <- {"v": 2, "id": "...", "ok": true, "dashboard": "/abs/x.levity", "window": "Levity Dashboard - x.levity",
         "windows": [{"id": "main", "title": "...", "dashboard": "/abs/x.levity", "screen": "Built-in", "pid": 42}]}
 
-`cmd` is `open`, `status` or `ping`; `list`, `focus`, `close`, `move` and `workspace` are reserved for the
-multi-window protocol and answer `not_implemented` until there is something to act on. `window` is `current`
-or `main` (the one window this process has); `new` answers `not_implemented` until a second window exists in
-one process. Every handler goes through `dispatch`, so anything that wants to drive the window later (the
-debug server, a wire relay) calls the same table instead of repeating the lookups.
+`cmd` is `open`, `status`, `ping`, `register`, `close` or `workspace`; `list`, `focus` and `move` are reserved
+for the multi-window protocol and answer `not_implemented` until there is something to act on. `window` is
+`current` or `main` (this process's window) or the id of a window that registered with this one, which `close`
+closes. `new` answers `not_implemented` until a second window exists in one process. Every handler goes through
+`dispatch`, so anything that wants to drive the window later (the debug server, a wire relay) calls the same
+table instead of repeating the lookups.
+
+`close` is carried out by the app, not here: this module is Qt-free and a client may ask from a process with no
+`QApplication` at all, so the app installs the one callback (`setCloseWindow`) that actually closes a window.
+
+`workspace` answers the layout this window is part of, unchanged in shape whether there is one or not::
+
+    {"ok": true, "workspace": "/Users/me/.config/LevityDash/workspaces/desk.yaml", "name": "desk",
+     "windows": [{"id": "main", "pid": 4112, "screen": "DELL U2720Q",
+                  "geometry": {"x": 0.0, "y": 0.0, "width": 0.5, "height": 1.0}, "mode": "windowed"}]}
+
+`workspace` is null and `name` this window's id when no workspace file is open; `geometry` is null for a window
+that has never been placed.
 
 A failure is never a bare string: `{"ok": false, "error": {"code": ..., "message": ...}}` with `code` one of
 `not_found | not_implemented | busy | bad_request`. The CLI turns that code into an exit status
@@ -39,7 +52,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import yaml
 
@@ -57,6 +70,11 @@ EXIT_CODES = {'not_found': 3, 'bad_request': 4, 'not_implemented': 5, 'busy': 6}
 
 #: Windows that registered themselves with this one (`cmd: register`), keyed by window id.
 _REGISTERED: dict[str, dict] = {}
+
+#: How the app closes its own window (`cmd: close`). Installed by the app, because this module is Qt-free: the
+#: callback is expected to schedule the close rather than close the window inside a request handler, so the
+#: reply is written before the socket goes away.
+_CLOSE_WINDOW: Callable[[], None] | None = None
 
 
 class ControlError(Exception):
@@ -80,6 +98,22 @@ def setSocketId(id: str | None) -> None:
 
 def socketId() -> str | None:
 	return _SOCKET_ID
+
+
+def setCloseWindow(callback: Callable[[], None] | None) -> None:
+	"""Install what `close` closes: the app's own window, deferred past the reply."""
+	global _CLOSE_WINDOW
+	_CLOSE_WINDOW = callback
+
+
+def ownWindowId() -> str:
+	"""The id this process's window answers to: its workspace entry's id, else `main`."""
+	from . import workspace
+
+	launch = workspace.launch()
+	if launch is not None and launch.windowId:
+		return launch.windowId
+	return 'main'
 
 
 def socketPath(id: str | None = None) -> str:
@@ -263,7 +297,7 @@ def _windows() -> list[dict]:
 
 	windows = []
 	if (panel := getattr(LevityDashboard, 'CENTRAL_PANEL', None)) is not None:
-		windows.append(windowInfo(panel))
+		windows.append(windowInfo(panel, ownWindowId()))
 	for key, info in list(_REGISTERED.items()):
 		if _alive(info.get('pid')):
 			windows.append(info)
@@ -302,6 +336,86 @@ def _register(payload: dict) -> dict:
 	return {'ok': True, 'registered': str(info['id'])}
 
 
+def _close(payload: dict) -> dict:
+	"""Close one window: this one by `current`/`main`/its own id, or a window that registered with it."""
+	target = payload.get('window') or 'current'
+	own = ownWindowId()
+	if target in ('', 'current', own) or (target == 'main' and socketId() is None):
+		if _CLOSE_WINDOW is None:
+			raise ControlError('no dashboard window is open', 'not_found')
+		# Deferred by the app, so this reply is written before the socket goes away with the window.
+		_CLOSE_WINDOW()
+		return {'ok': True, 'closed': own}
+	path = socketPath(id=target)
+	reply = request({'cmd': 'close', 'window': 'current'}, path=path, timeout=2.0, wait=0.2)
+	if reply is None:
+		raise ControlError(f'window {target!r} is not answering on {path}', 'not_found')
+	if not reply.get('ok'):
+		failure = reply.get('error')
+		message = failure.get('message') if isinstance(failure, dict) else failure
+		raise ControlError(f'window {target!r} did not close: {message}', 'busy')
+	return {'ok': True, 'closed': target}
+
+
+def _ownRecord() -> dict:
+	"""This window's screen, geometry and mode, as the app describes them (`workspaceRecord`)."""
+	from LevityDash import LevityDashboard
+
+	# The window hangs off the app (`LevityDashboard.app.main_window`); the singleton has no slot for it.
+	window = getattr(getattr(LevityDashboard, 'app', None), 'main_window', None)
+	describe = getattr(window, 'workspaceRecord', None)
+	if describe is None:
+		return {}
+	try:
+		return describe() or {}
+	except Exception:  # noqa: BLE001 - a window that cannot describe itself is still one window
+		return {}
+
+
+def _workspaceEntry(own: str, record: dict) -> dict:
+	geometry: Any = record.get('geometry')
+	return {
+		'id': own,
+		'pid': os.getpid(),
+		'screen': record.get('screen'),
+		'geometry': geometry.asDict() if hasattr(geometry, 'asDict') else geometry,
+		'mode': record.get('mode') or 'windowed',
+	}
+
+
+def _workspace(payload: dict) -> dict:
+	"""The layout this window belongs to, and every window in it.
+
+	Without a workspace file the answer keeps the same shape with one window: this one, made up of what the
+	app reports about itself.
+	"""
+	from . import workspace
+
+	own = ownWindowId()
+	record = _ownRecord()
+	entry = _workspaceEntry(own, record)
+	if entry['screen'] is None:
+		from LevityDash import LevityDashboard
+
+		entry['screen'] = _screen(getattr(LevityDashboard, 'CENTRAL_PANEL', None))
+	active = workspace.active()
+	if active is None:
+		return {'ok': True, 'workspace': None, 'name': own, 'windows': [entry]}
+	windows = []
+	placed = False
+	for window in active.windows:
+		if window.id is not None and workspace.slug(window.id) == workspace.slug(own):
+			entry['id'] = window.id
+			windows.append(entry)
+			placed = True
+			continue
+		info = _REGISTERED.get(workspace.slug(str(window.id))) or _REGISTERED.get(str(window.id)) or {}
+		windows.append(workspace.describe(window, pid=info.get('pid') or workspace.childPid(window.id), screen=info.get('screen')))
+	if not placed:
+		windows.insert(0, entry)
+	return {'ok': True, 'workspace': str(active.path) if active.path is not None else None, 'name': active.name, 'windows': windows}
+
+
 def _reserved(name: str) -> Callable[[dict], dict]:
 	"""A verb the multi-window protocol reserves: the name is taken, the work is not done yet."""
 
@@ -318,11 +432,11 @@ COMMANDS: dict[str, Callable[[dict], dict]] = {
 	'status': _status,
 	'ping': _ping,
 	'register': _register,
+	'close': _close,
+	'workspace': _workspace,
 	'list': _reserved('list'),
 	'focus': _reserved('focus'),
-	'close': _reserved('close'),
 	'move': _reserved('move'),
-	'workspace': _reserved('workspace'),
 }
 
 

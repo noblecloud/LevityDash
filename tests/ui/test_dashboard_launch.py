@@ -249,7 +249,8 @@ def test_unknown_command_lists_the_known_ones(server, dashboard):
 	assert 'open' in reply['error']['message']
 
 
-@pytest.mark.parametrize('command', ['list', 'focus', 'close', 'move', 'workspace'])
+# `close` and `workspace` are implemented (see tests/ui/test_workspace.py); these three are still names only.
+@pytest.mark.parametrize('command', ['list', 'focus', 'move'])
 def test_the_reserved_commands_answer_not_implemented(server, dashboard, command):
 	reply = call(dashboard, {'cmd': command})
 	assert reply['ok'] is False
