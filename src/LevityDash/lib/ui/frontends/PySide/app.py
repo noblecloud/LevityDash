@@ -333,10 +333,6 @@ class LevityScene(RendererScene):
 		from LevityDash.lib.ui.Geometry import StaticGeometry
 		return StaticGeometry(surface=self, position=(0, 0), absolute=True, snapping=False, updateSurface=False)
 
-	@cached_property
-	def window(self):
-		return LevityDashboard.app.activeWindow()
-
 	def rect(self):
 		return self.sceneRect()
 
@@ -547,7 +543,8 @@ class LevitySceneView(QGraphicsView):
 		return QTransform.fromScale(devicePixelRatio, devicePixelRatio)
 
 	def postInit(self):
-		LevityDashboard.app.primaryScreenChanged.connect(self.__screenChange)
+		LevityDashboard.app.primaryScreenChanged.connect(self.handleScreenChange)
+		self._logScreen()
 		self.base = self.graphicsScene.base
 		self.resizeDone = QTimer(interval=300, singleShot=True, timeout=self.resizeDoneEvent)
 		self.installEventFilter(self)
@@ -616,10 +613,19 @@ class LevitySceneView(QGraphicsView):
 
 	@property
 	def dpi(self):
-		return getDPI(app.activeWindow().screen()) or 96
+		return getDPI(self.screen()) or 96
 
-	def __screenChange(self):
+	def handleScreenChange(self, *_):
+		"""This window's screen changed (or the primary did): re-fit the scene to the new geometry."""
+		self._logScreen()
 		self.resizeDone.start()
+
+	def _logScreen(self):
+		try:
+			screen = self.screen()
+			guiLog.info(f'window screen: {screen.name() or "unnamed"} {screen.geometry().width()}x{screen.geometry().height()} dpi={self.dpi:.0f}')
+		except Exception:  # noqa: BLE001 - a log line must never stop a resize
+			pass
 
 	def _themeChanged(self, active):
 		# The scene paints the ground (`LevityScene.drawBackground`), flat or gradient.
@@ -1189,6 +1195,10 @@ class LevityMainWindow(QMainWindow):
 		self.setCentralWidget(self._wrapForCanvas(self.view))
 		self._initConnectionIndicator()
 		self.show()
+		# The app-wide signal only fires when the *primary* screen changes; a window moved to another
+		# monitor needs its own, or its geometry and DPI stay those of the screen it started on.
+		if (handle := self.windowHandle()) is not None:
+			handle.screenChanged.connect(self.view.handleScreenChange)
 
 		if platform.system() != 'Darwin':
 			self.updateMenuBar('show')

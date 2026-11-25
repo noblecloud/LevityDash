@@ -85,12 +85,26 @@ try:
 
 except ValueError:
 	defaultScreen = findScreen()
+	_warnedNoScreen = False
 
 
 	def getDPI(screen: QScreen = None) -> float:
-		if screen is None and (window := QApplication.instance().activeWindow()):
-			return window.screen().physicalDotsPerInch()
-		screen = screen or defaultScreen
+		"""Dots per inch of `screen`.
+
+		A caller with a window passes that window's screen (`view.screen()`). Resolving through the *active*
+		window made inch-based sizing follow focus: clicking a window on another monitor changed this one's
+		text size. The no-argument form stays for unit conversions with no view in hand, warns once, and
+		reads the screen `[Display] display` names.
+		"""
+		global _warnedNoScreen
+		if screen is None:
+			if not _warnedNoScreen:
+				_warnedNoScreen = True
+				log.warning(
+					'getDPI() without a screen: using the configured display. Pass view.screen() so a window '
+					'on another monitor keeps its own DPI.'
+				)
+			screen = defaultScreen
 		try:
 			return screen.physicalDotsPerInch()
 		except RuntimeError:

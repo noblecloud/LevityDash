@@ -232,7 +232,7 @@ class CentralPanel(Panel, tag="dashboard"):
 		if path is not None and path.exists():
 			self._load(path)
 			return
-		QMessageBox.warning(self.scene().window, "No Dashboard", "There is currently no loaded dashboard to refresh")
+		QMessageBox.warning(self.window, "No Dashboard", "There is currently no loaded dashboard to refresh")
 
 	def loadItem(self):
 		from LevityDash.lib.ui.frontends.PySide.Modules import PanelFromFile
@@ -311,7 +311,7 @@ class CentralPanel(Panel, tag="dashboard"):
 		path = self._path(self.filePath)
 		if path is not None and self.isConfigFile(path):
 			if not self._save(path.parent, path.name):
-				QMessageBox.warning(self.scene().window, 'Save Failed', f'Could not write {path}.')
+				QMessageBox.warning(self.window, 'Save Failed', f'Could not write {path}.')
 			return
 		self.saveAs(prefill=path)
 
@@ -382,7 +382,7 @@ class CentralPanel(Panel, tag="dashboard"):
 			log.error(message)
 			if not interactive:
 				raise FileNotFoundError(message)
-			QMessageBox.critical(self.scene().window, "Error", message)
+			QMessageBox.critical(self.window, "Error", message)
 			return
 		name = path.name
 		self.scene().view.parentWidget().setWindowTitle(f"Levity Dashboard - {name}")
@@ -407,7 +407,7 @@ class CentralPanel(Panel, tag="dashboard"):
 		except yaml.YAMLError as error:
 			log.exception(f"Error loading dashboard: {path}\n{error}")
 			if interactive:
-				QMessageBox.critical(self.scene().window, "Error", f"Error loading dashboard: {path}\n{error}")
+				QMessageBox.critical(self.window, "Error", f"Error loading dashboard: {path}\n{error}")
 			raise error
 
 		if self.filePath is None or self.loadedFile != path:
