@@ -168,15 +168,15 @@ A full ring (360 sweep) is untested in `Gauge`. Test it first.
 | air-quality | zoned 0-500, half dial | indoor CO2, noise level | AQI, UV band | N2 | partly: soft bands |
 | heart-rate | zoned range, zone-coloured fill | pulse, CPU load | heat index, wind chill | N1, N2 | partly: gradient arc and needle |
 | timer | bounded fill, seconds, full ring | countdown, cooldown | minutes to rain | N1 | no |
-| chronograph | cyclical 60, plus a register inset | stopwatch | none worth building | N4, N6 | no |
+| chronograph | cyclical 60, plus a register inset | stopwatch | none worth building | N4, N6 | no. In scope, late: needs N4 and N6 first. |
 | speed-fuel | two dials in one ring | speed and tank | wind and gust | N2, N6 | no: the pair is the point |
 | nested-rings | three concentric fills | three goals | temperature, humidity, cloud as % of range | N1, N6 | no |
 | system | three half dials in one frame | CPU, memory, disk | humidity, cloud, rain chance | N1, N6 | no |
-| orrery | N cyclical positions on rings | phase of any cycle | tide, moon, season | N1, N4, N6 | no. Decorative, so it comes after the rest, but it is in scope. |
+| orrery | N cyclical positions on rings | phase of any cycle | tide, moon, season | N1, N4, N6 | no. In scope, last: needs N1, N4 and N6 first. |
 | barometer *(weather-dashboard)* | range with words, set hand, fall arc | any value with a "was" mark | pressure with 3 h set hand | N1 (`from: set`), N3 (`at(key, -3h)`), N7 (words) | partly: needle and numeric labels, no set hand |
 | humidity comfort band *(weather-dashboard)* | bounded % with a highlighted band and dot | CPU temperature in the safe band | humidity, comfortable 30-60 % | N1 (`from`/`to` band) or N2 | partly: gradient with band stops and a circle needle |
 
-Totals: 29 rows. One preset is **yes** today (analog-dial). Eleven are
+Cockpit rows are in section 2b. Totals below count section 2 only: 29 rows. One preset is **yes** today (analog-dial). Eleven are
 **partly** (speedometer, temperature, compass, wind, fuel, tachometer,
 power-meter, air-quality, heart-rate, barometer, humidity band). `simple` needs
 no gauge. The other sixteen are **no**.
@@ -188,6 +188,63 @@ the background colour, so they add no row and no primitive.
 N1 is in the "Needs" column of 18 rows, more than any other primitive (N2: 9,
 N4: 7, N7: 6, N6: 5, N3: 4). Some of those entries are optional, as marked. N1 alone turns eight presets from **no** to
 **yes**.
+
+## 2b. The Cockpit tab
+
+Source: `components/examples/cockpit.tsx` in gauge-ui (commit `cfe5341`). Six
+instruments of a light aircraft. The user plans an overhead-flights tracker, so
+these are in scope; they come after steps 2-4 of the build order.
+
+Primitives beyond N1-N7. Names are for this brief.
+
+- **N8** Rotating card: the whole dial turns by a value under a fixed index
+  (`rotate={-heading}`, shortest path across 0). Needs the fixed lubber line
+  and case marks on top (an inset that does not turn, so N6).
+- **N9** Horizon: a clipped scene (sky and ground, a line, a pitch ladder)
+  drawn inside the dial, rotated by one value (roll) and shifted by another
+  (pitch, in pixels per degree). Two values on one layer.
+- **N10** Multi-turn hand: a second needle on the same scale that goes round
+  `turns` times per sweep (`turns: 10`, the altimeter's hundreds hand).
+- **N11** Concentric arc layers: several arcs on one dial, each with its own
+  `from`/`to`, `offset` from the rim, `weight` and `opacity`. Today `Gauge`
+  has one `arc` and one `fill`. N2 zones cover the coloured bands; a thin
+  inner band (the flap range) needs its own offset.
+- **N12** Free text at a position: a fixed caption or a value in a window at
+  an offset from the centre (`KNOTS`, `29.92`, `HDG 270`). Today only the
+  value and unit labels exist. A window value takes a key (value-sources).
+- **N13** Marks at listed values: heavy index marks at chosen values with
+  their own length, width and offset (never-exceed speed, level, bank angles).
+  N2 draws marks at zone cutoffs only; this is the free form.
+- **N14** Several needles on one value, each its own dial angle (the turn
+  coordinator draws two wings and a fin as three needles on one rate).
+- **N15** Hub: a pivot cap at the centre, a filled circle with a smaller
+  circle in the background colour on top. `needle: circle` is not a hub.
+- **N16** Slip tube: a small arc inset with a track, two rails and a dot
+  (a ball in a glass tube). N6 plus N11.
+
+| Preset | Data shape | Non-weather use | Weather or flights use | Needs | Today |
+|---|---|---|---|---|---|
+| airspeed | 40-200 kn on a 320 degree sweep, flap arc, banded ranges, never-exceed mark | any throughput with a hard limit | aircraft ground speed; wind speed against a gust limit | N2, N11, N13, N15 | partly: one soft arc, one needle, no bands |
+| attitude | roll on a 180 degree bank scale, pitch ladder, fixed aircraft symbol | tilt of any sensor | aircraft pitch and bank | N9, N13, N15, N6 (fixed symbol layer) | no. N9 is the whole point. |
+| altimeter | 0-10000 ft, two hands (thousands and hundreds), pressure window | any value read at two scales | aircraft altitude; cloud base | N10, N12, N15 | no |
+| turn coordinator | rate -1.5..1.5, three needles as one symbol, slip ball in a tube | any signed rate and a balance value | aircraft turn rate | N6, N14, N16, N13, N11, N12 | no |
+| heading indicator | 0-360 card that turns under a fixed index, heading bug, cardinal labels | bearing of any source | aircraft track; wind from | N8, N4 (wrap), N7 (letters), N13 (bug), N12 | partly: a compass dial with a needle; the card does not turn |
+| vertical speed | -2..2 over 360 degrees, level at 9 o'clock, blank label at 0 | rate of change of any value | climb rate; pressure tendency | N7 (blank and absolute-value labels), N13, N12, N15 | partly: numeric labels, no start angle past the arc limits (untested) |
+
+Each Cockpit dial also fills its pod to the rim. Set `arc: {weight: 0}` or use
+the `radius` property, and check it at small render size.
+
+Two checks to make before the Cockpit work starts:
+
+- A sweep over 180 degrees with a start angle past +-180 (airspeed 200-520,
+  vertical speed -90-270). `value_to_angle` sorts start, angle and end, so
+  start and end are assumed in order. Render both first.
+- A needle fed by a second key (attitude pitch, turn slip). N3 markers take
+  keys. A needle does not.
+
+The overhead-flights tracker is mostly a data question, not a gauge one:
+where aircraft position, altitude, heading and speed come from, and how one
+dial follows one aircraft. That belongs in [value-sources.md](value-sources.md).
 
 ## 3. Build order
 
@@ -202,6 +259,7 @@ Do the registry before any preset.
 | 4 | **N7** label formatters | `compass`, `wind` (still needs the second key), `fuel` E/F, `power-meter`, `barometer` words. Cheapest of the set. Do it with or just after step 2. |
 | 5 | **N6** insets | `system`, `nested-rings`, `speed-fuel`. Interim: layer overlapping `realtime.gauge` panels in one group, each with its own preset. Untested; check that panel backgrounds stay clear. |
 | 6 | **N4** scale types | `sun-path`, `clock`, `chronograph`, `orrery`; also shortest-path needle across 0 for `compass` and `wind`. |
+| 6b | **Cockpit** (section 2b): N8, N9, N10, N11, N12, N13, N14, N15, N16 | `airspeed`, `heading indicator`, `vertical speed` first (N8, N10-N13, N15); `altimeter` next; `turn coordinator` and `attitude` last (they need N6 and N9). |
 | 7 | **N5** animated value | Nothing new. Polish for every preset. See section 4 for the one rule. |
 
 Steps 2-4 are independent of each other. Step 2 first, because it unlocks the
