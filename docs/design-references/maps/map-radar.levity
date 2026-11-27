@@ -1,0 +1,7 @@
+# Radar over a dark map: the last two hours looping, in the dashboard's own colours.
+- type: map
+  name: map
+  layer: radar
+  lat: 40.0
+  lon: -88.0
+  zoom: 5

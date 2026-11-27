@@ -51,3 +51,4 @@ from .Realtime import Realtime
 from .Moon import Moon
 from .Graph import *
 from .polar.item import Polar
+from .weathermap.item import WeatherMap

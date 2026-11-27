@@ -1,0 +1,9 @@
+# The same radar on the light theme: the base map is tinted from the theme, so it turns pale with it.
+theme: paper
+items:
+  - type: map
+    name: map
+    layer: radar
+    lat: 40.0
+    lon: -88.0
+    zoom: 5

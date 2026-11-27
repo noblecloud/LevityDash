@@ -66,6 +66,7 @@ The current properties are:
 <div class="multi-column">
 
 - realtime[.text|.gauge|.bar]
+- map (see [Weather maps](dashboard/map.md))
 - text / label
 - group
 - titled-group
