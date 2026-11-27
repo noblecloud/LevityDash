@@ -148,12 +148,20 @@ class _LevityAppDirs(AppDirs):
 
 class _LevityArgParser(ArgumentParser):
 
+	#: Flags that belong to Qt or to the app but are read by hand elsewhere, so `parse_known_args` leaving
+	#: them over is normal and must not be reported as a typo.
+	PASS_THROUGH = frozenset({'--fullscreen'})
+
 	def __init__(self, *args, **kwargs):
 		kwargs.update(
 			{
 				'prog': "levitydash-cli",
 				'epilog': "For more information, see https://LevityDash.app",
 				'exit_on_error': False,
+				# This parser runs at import time - in the app, in the backend, in pytest, in devtools - so a
+				# prefix may not be matched for you: `--d` would otherwise grab `--dashboard` and a typo that
+				# happened to be a prefix of a real flag would silently change what the app does.
+				'allow_abbrev': False,
 			}
 		)
 		super(_LevityArgParser, self).__init__(*args, **kwargs)
@@ -163,6 +171,48 @@ class _LevityArgParser(ArgumentParser):
 
 	def __add_args(self):
 		self.add_argument('--reset-config', action='store_true', help='Reset the configuration directory to default')
+		self.add_argument(
+			'--dashboard', metavar='PATH', default=None,
+			help='Show this dashboard file instead of the configured one. The configured dashboard is not changed. '
+				 'If LevityDash is already running, the file is handed to that window.',
+		)
+		self.add_argument(
+			'--new-instance', action='store_true',
+			help='Start a second window even when one is already running, instead of handing the file to it. '
+				'The second window gets its own control socket. With mode=live it loads the plugins again.',
+		)
+		self.add_argument(
+			'--workspace', metavar='NAME_OR_PATH', default=None,
+			help='Open a workspace: window 1 in this process, one child process per remaining window. A name is '
+			     'read from <config>/workspaces/<name>.yaml. [Display] dashboard is not changed.',
+		)
+		self.add_argument(
+			'--window', metavar='PATH', action='append', default=None,
+			help='Show one dashboard in a window of its own, one process per --window, in the order given. An '
+			     'unsaved workspace: no geometry, no ids. Cannot be combined with --workspace.',
+		)
+		self.add_argument(
+			'--screen-name', metavar='NAME', default=None,
+			help='Open on the screen with this name (a workspace window passes the name its file gives).',
+		)
+		self.add_argument(
+			'--screen-fallback', metavar='NAME_OR_PRIMARY', default=None,
+			help='The screen to use when --screen-name is not attached (default: primary).',
+		)
+		self.add_argument(
+			'--geometry', metavar='X,Y,WIDTH,HEIGHT', default=None,
+			# argparse formats help strings, so a literal percent has to be doubled.
+			help='Place the window at these fractions of the screen\'s available geometry, or percentages '
+			     '("0,0,100%%,100%%").',
+		)
+		self.add_argument(
+			'--mode', choices=('windowed', 'fullscreen', 'kiosk'), default=None,
+			help='How the window opens: windowed, fullscreen, or kiosk (frameless, filling the screen).',
+		)
+		self.add_argument(
+			'--window-id', metavar='ID', default=None,
+			help='Name the control socket of a --new-instance window (default: the dashboard file name, else w<pid>).',
+		)
 		self.add_argument('--version', action='version', version=f'%(prog)s {__version__}')
 
 	def __add_logging_parsers(self):
@@ -175,7 +225,7 @@ class _LevityDashboard(object):
 
 	__version__ = __version__
 	revision: ClassVar[str | None] = None  # git revision, resolved below when run from source
-	__slots__ = ('app', '__lib', 'config', 'pluginConfig', 'plugins', 'dispatcher',
+	__slots__ = ('app', '__lib', 'config', 'pluginConfig', 'plugins', 'dispatcher', 'dashboardOverride',
 							 'log', 'get_channel', 'get_container', 'clock', 'status_bar', 'splash',
 							 'main_window', 'view', 'plugin_config', 'pluginPool', 'pluginThread',
 							 'main_action_pool', 'main_thread_pool', 'CENTRAL_PANEL', 'scene',
@@ -228,7 +278,14 @@ class _LevityDashboard(object):
 
 	@classmethod
 	def parse_args(cls):
-		cls.parsed_args = cls.args.parse_known_args()[0]
+		import sys  # the module unbinds `sys` at the bottom of the file; a global would be gone by now
+
+		cls.parsed_args, unknown = cls.args.parse_known_args()
+		# Qt owns its own flags and `--fullscreen` is read from argv by hand, so leftovers are normal; a
+		# misspelt option is not, and silence would make it look like the flag was accepted.
+		for arg in unknown:
+			if arg.startswith('--') and arg not in cls.args.PASS_THROUGH:
+				print(f'levitydash: ignoring unknown option {arg!r}', file=sys.stderr)
 
 	def update_args(self):
 		self.args.parse_args()

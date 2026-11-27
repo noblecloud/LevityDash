@@ -47,6 +47,7 @@ These pages cover the properties that work on a whole dashboard:
 - [Split](/config/dashboard/split.md): two items either side of a divider that you can drag.
 - [Flex and grid](/config/dashboard/layout.md): CSS flexbox and grid layout for stacks.
 - [Studio](/config/dashboard/studio.md): the editor for dashboard files, with its item tree, groups and zoom.
+- [Opening a dashboard](/config/dashboard/opening.md): the configured one, a file for one run, or a handoff to the window that is already open.
 
 ## Shared Properties
 
