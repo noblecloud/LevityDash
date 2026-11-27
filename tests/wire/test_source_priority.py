@@ -60,3 +60,12 @@ def test_a_stale_source_is_better_than_nothing():
 	multi = MultiSourceContainer(KEY)
 	station = _add(multi, 'WeatherFlow', priority=20, maxAge=timedelta(minutes=30), age=timedelta(hours=3))
 	assert multi.getRealtimeContainer() is station
+
+
+def test_default_config_file_is_named_for_the_class_not_a_property():
+	"""Govee's `name` is a property, so `Govee.name` is a property object: it must not name a file."""
+	import inspect
+	from LevityDash.lib.plugins.builtin.Govee import Govee
+	from LevityDash.lib.plugins.plugin import Plugin
+	assert not isinstance(Govee.name, str)
+	assert 'cls.name}' not in inspect.getsource(Plugin.getDefaultConfig)
