@@ -7,6 +7,7 @@ socket and the dispatcher: a ``WireClient`` feeds ``handle_message`` and the
 callback is ``dispatcher.update`` — that wiring lands with the backend process,
 so this logic stays testable without Qt plumbing or a live socket.
 """
+from datetime import timedelta
 from typing import Callable, Dict, Optional
 
 from LevityDash.lib.log import LevityPluginLog
@@ -83,6 +84,8 @@ class RemoteFrontend:
 				defaultFor=set(info.get('defaultFor') or ()),
 				enabled=info.get('enabled', True),
 				running=info.get('running', True),
+				priority=info.get('priority', 0),
+				maxAge=timedelta(seconds=info['maxAge']) if info.get('maxAge') else None,
 				ts_request_fn=self._ts_request_fn,
 			)
 		return source

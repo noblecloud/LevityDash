@@ -1,7 +1,7 @@
 import os
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import cached_property, partial
 from typing import Callable, Coroutine, Dict, Iterable, List, Set, Type
 
@@ -22,6 +22,38 @@ from LevityDash.lib.wire.bridge import LoopbackBridge
 from unitcorn import Measurement, auto as wu_auto
 
 log = LevityPluginLog.getChild('Dispatcher')
+
+
+def _rank(source) -> tuple:
+	"""Sort key for choosing between sources of one key; the larger wins.
+
+	The source's ``priority`` (config ``priority``, else the plugin's ``sourcePriority``) first, so a
+	user-trusted or accurate source beats a weak one; how many keys it claims in ``defaultFor`` only
+	breaks ties. Works for a plugin and for a ``RemoteSource``.
+	"""
+	config = source.config
+	return float(getattr(config, 'priority', 0) or 0), len(config.defaultFor)
+
+
+def _isStale(container) -> bool:
+	"""Whether a source's live reading has gone quiet for longer than its ``maxAge``.
+
+	Only a realtime reading from a source that sets a ``maxAge`` can be stale; a forecast never is.
+	Anything that cannot be judged (no timestamp, odd value) counts as fresh, so a bug here can only
+	leave the old behaviour in place.
+	"""
+	try:
+		maxAge = getattr(container.source.config, 'maxAge', None)
+		if not maxAge or not container.isRealtime:
+			return False
+		stamp = container.now.timestamp
+		if stamp is None:
+			return False
+		if stamp.tzinfo is None:
+			stamp = stamp.astimezone()
+		return datetime.now(tz=stamp.tzinfo) - stamp > maxAge
+	except Exception:
+		return False
 
 
 def backend_mode() -> str:
@@ -170,7 +202,7 @@ class MultiSourceContainer(dict):
 				in self.values()
 				if container.isRealtime
 				   or (container.isRealtimeApproximate and not strict)],
-			key=lambda c: (c.isRealtime, len(c.source.config.defaultFor)), reverse=True
+			key=lambda c: (not _isStale(c), c.isRealtime, _rank(c.source)), reverse=True
 		)
 		try:
 			return realtimeContainers[0]
@@ -210,7 +242,7 @@ class MultiSourceContainer(dict):
 				c for c in self.values()
 				if c.timeseries is not None and (c.isForecast or (c.isDaily and not strict) or self._historyOnly(c))
 			],
-			key=lambda c: (c.isForecast, len(c.source.config.defaultFor)), reverse=True
+			key=lambda c: (c.isForecast, _rank(c.source)), reverse=True
 		)
 		try:
 			return timeseriesContainers[0]
@@ -244,7 +276,7 @@ class MultiSourceContainer(dict):
 				c for c in self.values()
 				if c.isDaily
 			],
-			key=lambda c: (c.isDailyForecast, len(c.source.config.defaultFor)), reverse=True
+			key=lambda c: (c.isDailyForecast, _rank(c.source)), reverse=True
 		)
 		try:
 			return dailyContainers[0]
@@ -297,7 +329,7 @@ class MultiSourceContainer(dict):
 	@property
 	def valid_sources(self) -> List[Plugin]:
 		_plugins = [i for i in LevityDashboard.plugins if self.key in i.schema]
-		_plugins.sort(key=lambda p: (0 if not p.enabled else 2 if p.running else 1, len(p.config.defaultFor)), reverse=True)
+		_plugins.sort(key=lambda p: (0 if not p.enabled else 2 if p.running else 1, _rank(p)), reverse=True)
 		return _plugins
 
 	@cached_property
@@ -305,18 +337,21 @@ class MultiSourceContainer(dict):
 		if len(self) == 1:
 			return list(self.values())[0]
 		_plugins = [i for i in LevityDashboard.plugins if i.config['enabled'] and i.name in self]
+		# A source that has gone quiet (a dead sensor) only answers when nothing fresher has the key.
+		if (fresh := [i for i in _plugins if not _isStale(self[i.name])]) and len(fresh) < len(_plugins):
+			_plugins = fresh
 		for i in self.key[::-1]:
-			for plugin in _plugins:
-				if i in plugin.config.defaultFor:
-					return self[plugin.name]
-		for plugin in _plugins:
+			claimed = [plugin for plugin in _plugins if i in plugin.config.defaultFor]
+			if claimed:
+				return self[max(claimed, key=_rank).name]
+		for plugin in sorted(_plugins, key=_rank, reverse=True):
 			if LevityDashboard.dispatcher[plugin.name] in self:
 				return self[plugin.name]
 		options = list(self.values())
 		if len(options) == 1:
 			return options[0]
 		elif len(options) > 1:
-			options = sorted(options, key=lambda x: len(x.source.config.defaultFor), reverse=True)
+			options = sorted(options, key=lambda x: (not _isStale(x), _rank(x.source)), reverse=True)
 			return options[0]
 		else:
 			raise ValueError('No default container found for {}'.format(self.key))
@@ -409,7 +444,7 @@ class MultiSourceContainer(dict):
 			# a graph could render PirateWeather while the config named
 			# OpenMeteo, and the other three accessors disagreed with it.
 			candidates = sorted(
-				self.values(), key=lambda c: len(c.source.config.defaultFor), reverse=True
+				self.values(), key=lambda c: (not _isStale(c), _rank(c.source)), reverse=True
 			)
 		else:
 			candidates = [self[plugin]] if plugin in self else []

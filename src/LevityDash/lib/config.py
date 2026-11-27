@@ -9,7 +9,7 @@ from logging import getLogger, Logger
 from pathlib import Path, PosixPath, PurePath
 from re import search
 from shutil import copytree
-from typing import Callable, ClassVar, Text, Union
+from typing import Callable, ClassVar, Optional, Text, Union
 
 from pytz import timezone
 from rich import prompt
@@ -501,6 +501,35 @@ class PluginConfig(LevityConfig):
 		if 'defaultFor' in self.defaults():
 			return set(re.findall(rf"[\w|\-]+", self['defaultFor']))
 		return set()
+
+	@cached_property
+	def priority(self) -> float:
+		"""How strongly this plugin is preferred when several publish the same key.
+
+		Higher wins. ``priority = N`` in the plugin's own config overrides the plugin class's
+		``sourcePriority`` (0 unless the plugin says otherwise). Explicit ``defaultFor`` matches
+		still come first; priority orders the rest, and ties between them.
+		"""
+		raw = self.defaults().get('priority') if 'priority' in self.defaults() else None
+		try:
+			return float(raw)
+		except (TypeError, ValueError):
+			return float(getattr(type(self.plugin), 'sourcePriority', 0))
+
+	@cached_property
+	def maxAge(self) -> Optional[timedelta]:
+		"""How old a realtime reading may be before the source stops being preferred for it.
+
+		``maxAge = N`` (minutes) in the plugin's config overrides the plugin class's ``sourceMaxAge``
+		(a timedelta, or None for never). 0 turns the check off. A stale source is not removed: it
+		still answers when nothing fresher publishes the key.
+		"""
+		raw = self.defaults().get('maxAge') if 'maxAge' in self.defaults() else None
+		try:
+			minutes = float(raw)
+		except (TypeError, ValueError):
+			return getattr(type(self.plugin), 'sourceMaxAge', None)
+		return timedelta(minutes=minutes) if minutes > 0 else None
 
 	@property
 	def plugin(self) -> 'Plugin':

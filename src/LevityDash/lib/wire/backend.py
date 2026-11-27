@@ -149,6 +149,8 @@ class RemoteBackend:
 			defaultFor=set(plugin.config.defaultFor),
 			enabled=plugin.enabled,
 			running=plugin.running,
+			priority=plugin.config.priority,
+			maxAge=plugin.config.maxAge,
 			updates=updates,
 		)
 		try:
