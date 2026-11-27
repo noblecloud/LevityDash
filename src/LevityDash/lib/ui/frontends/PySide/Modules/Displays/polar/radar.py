@@ -234,7 +234,7 @@ def drawRadar(
 			taken.append(box)
 			_haloText(painter, text, box.center().x(), box.center().y(), look.text, font)
 
-	_ringLabels(painter, look, cx, cy, values, toRadius, lambda v: f'{v:g}', fontPx * 0.8, degrees=202)
+	_ringLabels(painter, look, cx, cy, values, toRadius, lambda v: f'{v:g}', fontPx * 1.1, degrees=202)
 
 	# You, in the middle.
 	painter.setPen(QPen(look.text, max(1.0, radius * 0.005)))

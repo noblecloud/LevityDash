@@ -201,7 +201,7 @@ items:
         unit_symbol: false
     geometry:
       x: 56.1%
-      y: 4.6%
+      y: 5.5%
       width: 8%
       height: 5.8%
     margins:
@@ -264,7 +264,7 @@ items:
         unit_symbol: false
     geometry:
       x: 56.1%
-      y: 13.8%
+      y: 14.7%
       width: 8%
       height: 5.8%
     margins:
@@ -643,8 +643,8 @@ items:
     color: $warn
     alignment: CenterRight
     geometry:
-      x: 89.9%
-      y: 5.3%
+      x: 89.5%
+      y: 4.7%
       width: 2.6%
       height: 3.6%
     icon: wi:sunrise
@@ -655,8 +655,8 @@ items:
     color: $accent
     alignment: CenterRight
     geometry:
-      x: 89.9%
-      y: 12.9%
+      x: 89.5%
+      y: 12.3%
       width: 2.6%
       height: 3.6%
     icon: wi:sunset
@@ -883,9 +883,9 @@ items:
     color: $series-2
     alignment: BottomLeft
     geometry:
-      x: 74.5%
+      x: 72.5%
       y: 28.5%
-      width: 23.5%
+      width: 25.5%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -896,7 +896,7 @@ items:
     key: indoor.battery.battery
     title: false
     geometry:
-      x: 88.55%
+      x: 87.95%
       y: 28.725%
       width: 2.4%
       height: 1.05%
@@ -922,9 +922,9 @@ items:
         visible: false
   - type: mini-graph
     geometry:
-      x: 74.5%
+      x: 72.5%
       y: 30.8%
-      width: 23.5%
+      width: 25.5%
       height: 27.1%
     timeframe:
       hours: 24
@@ -995,9 +995,9 @@ items:
         decimal-align: baseline
       format-hint: 00.0°
     geometry:
-      x: 74.5%
+      x: 72.5%
       y: 30.8%
-      width: 16.45%
+      width: 17.85%
       height: 11.5%
     margins:
       left: 0
@@ -1011,9 +1011,9 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 74.5%
+      x: 72.5%
       y: 60.1%
-      width: 7.233%
+      width: 7.9%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1042,9 +1042,9 @@ items:
           bottom: 0
       format-hint: 00%
     geometry:
-      x: 74.5%
+      x: 72.5%
       y: 62.0%
-      width: 7.233%
+      width: 7.9%
       height: 3.6%
     margins:
       left: 0
@@ -1058,9 +1058,9 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 82.333%
+      x: 81.0%
       y: 60.1%
-      width: 7.233%
+      width: 7.9%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1089,9 +1089,9 @@ items:
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 82.333%
+      x: 81.0%
       y: 62.0%
-      width: 7.233%
+      width: 7.9%
       height: 3.6%
     margins:
       left: 0
@@ -1105,9 +1105,9 @@ items:
     color: $faint
     alignment: BottomRight
     geometry:
-      x: 90.167%
+      x: 89.5%
       y: 60.1%
-      width: 7.233%
+      width: 7.9%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1136,9 +1136,9 @@ items:
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 90.167%
+      x: 89.5%
       y: 62.0%
-      width: 7.233%
+      width: 7.9%
       height: 3.6%
     margins:
       left: 0
