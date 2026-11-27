@@ -335,9 +335,9 @@ def board(rooms=INDOOR):
 			     'plot': {'type': 'plot', 'gradient': 'TemperatureGradient', 'weight': 1.0, 'glow': GLOW, 'fill': {'opacity': 0.35, 'fade': True}}, 'resolution': 2},
 			 'environment.temperature.feelsLike': {'plot': {'type': 'plot', 'gradient': 'TemperatureGradient', 'weight': 0.3, 'opacity': 0.6}},
 			 'environment.temperature.dewpoint': {'plot': {'type': 'plot', 'color': '$good', 'dashPattern': '5, 5', 'weight': 0.35, 'cap': 'square'}}},
-			{'figure': 'clouds', 'margins': {'top': '72%', 'bottom': '9%'}, 'min': 0, 'max': 1,
+			{'figure': 'clouds', 'margins': {'top': '72%', 'bottom': '1%'}, 'min': 0, 'max': 1,
 			 f'{C}.cover': {'plot': {'type': 'plot', 'color': '$faint', 'weight': 0.3, 'opacity': 0.6, 'fill': {'opacity': 0.12, 'fade': True}}}},
-			{'figure': 'rain', 'margins': {'top': '70%', 'bottom': '9%'}, 'min': 0, 'max': 0.4,
+			{'figure': 'rain', 'margins': {'top': '70%', 'bottom': '1%'}, 'min': 0, 'max': 0.4,
 			 PR: {'plot': {'type': 'bar', 'color': '$info', 'width': 0.62, 'radius': 0.5, 'glow': GLOW}, 'smooth': False}},
 		]})
 	# ------------------------------------------------------------ indoors
