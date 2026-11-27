@@ -388,6 +388,9 @@ class WeatherFlow(REST, realtime=True, daily=True, hourly=True, logged=True):
 	urls: WFURLs = WFURLs()
 	schema = schema
 	name = 'WeatherFlow'
+	# Half an hour of silence from a key means that sensor is down: other sources take the key over.
+	sourceMaxAge = timedelta(minutes=30)
+	sourcePriority = 20  # a station in the yard beats a model, for the keys it really reports
 	windIndex = 0
 
 	__defaultConfig__ = _defaultConfig
