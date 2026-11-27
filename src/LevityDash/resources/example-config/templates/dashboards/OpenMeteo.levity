@@ -850,7 +850,7 @@ items:
     - figure: clouds
       margins:
         top: 72%
-        bottom: 9%
+        bottom: 1%
       min: 0
       max: 1
       environment.clouds.cover.cover:
@@ -865,7 +865,7 @@ items:
     - figure: rain
       margins:
         top: 70%
-        bottom: 9%
+        bottom: 1%
       min: 0
       max: 0.4
       environment.precipitation.precipitation:
