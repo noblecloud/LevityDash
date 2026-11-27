@@ -320,14 +320,14 @@ def board(rooms=INDOOR):
 		'type': 'graph', 'name': 'forecast', 'geometry': g(1.5, 28.5, 69.5, 37),
 		'timeframe': {'days': 2, 'hours': 18, 'offset': {'hours': -6}},
 		'annotations': {'dayLabels': {'position': 'Center', 'alignment': 'Center', 'opacity': '12%', 'height': '38%'},
-		                'hourLabels': {'alignment': 'BottomCenter', 'spacingIntervals': '6, 12', 'height': '4%'},
+		                'hourLabels': {'alignment': 'BottomCenter', 'spacingIntervals': '6, 12', 'height': '7.5%'},
 		                'lines': {'spacing': '12 mm', 'weight': 0.4}},
 		'figures': [
-			{'figure': 'sky', 'margins': {'top': '3%', 'bottom': '87%'},
+			{'figure': 'sky', 'margins': {'top': '9%', 'bottom': '81%'},
 			 'environment.temperature.dewpoint': {'plot': {'type': 'strip', 'pins': {
 				 'key': PR, 'size': 30, 'at': 0.5, 'color': '$info', 'spacing': 3.2,
 				 'steps': [[0, 'wi:day-cloudy'], [0.02, 'wi:sprinkle'], [0.1, 'wi:showers'], [0.2, 'wi:rain']]}}}},
-			{'figure': 'arrows', 'margins': {'top': '13%', 'bottom': '80%'},
+			{'figure': 'arrows', 'margins': {'top': '19%', 'bottom': '75%'},
 			 'environment.temperature.dewpoint': {'plot': {'type': 'strip', 'pins': {
 				 'key': f'{W}.direction.direction', 'glyph': 'wi:direction-up', 'rotate': 180, 'size': 24, 'at': 0.5, 'spacing': 3.4, 'color': '$faint'}}}},
 			{'figure': 'temperature', 'margins': {'top': '28%', 'bottom': '30%'},

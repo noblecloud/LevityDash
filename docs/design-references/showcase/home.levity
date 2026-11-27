@@ -776,15 +776,15 @@ items:
       hourLabels:
         alignment: BottomCenter
         spacingIntervals: 6, 12
-        height: 4%
+        height: 7.5%
       lines:
         spacing: 12 mm
         weight: 0.4
     figures:
     - figure: sky
       margins:
-        top: 3%
-        bottom: 87%
+        top: 9%
+        bottom: 81%
       environment.temperature.dewpoint:
         plot:
           type: strip
@@ -805,8 +805,8 @@ items:
               - wi:rain
     - figure: arrows
       margins:
-        top: 13%
-        bottom: 80%
+        top: 19%
+        bottom: 75%
       environment.temperature.dewpoint:
         plot:
           type: strip
