@@ -73,7 +73,7 @@ class GroupsTab(QWidget):
 		self.name.setCompleter(self.completer)
 		fbox.addRow('Group', self.name)
 		self.matchAll = QCheckBox('Match the whole tier')
-		self.matchAll.setToolTip('Everything of a tier in the group shares one size wherever it is. Without it only boxes within 10 px of each other do.')
+		self.matchAll.setToolTip('Everything of a tier in the group shares one size wherever it is. Without it only boxes that touch do.')
 		self.matchAll.setChecked(True)
 		fbox.addRow('', self.matchAll)
 		buttons = QHBoxLayout()

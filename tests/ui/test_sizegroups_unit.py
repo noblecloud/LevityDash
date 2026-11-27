@@ -33,6 +33,7 @@ class _Item:
 		self._valign = valign
 		self.text = text
 		self._sized = None
+		self.tierReference = 1000.0   # the dashboard height a size is measured against; a tier is 1% of it (10 px here)
 
 	@property
 	def suggestedFontPixelSize(self):
@@ -99,14 +100,28 @@ def test_stub_satisfies_protocol():
 
 
 # --------------------------------------------------------------------------- #
-# make_size_key: bucket a size to the nearest reach step, floored at reach
+# make_size_key: bucket a size to a share of the dashboard's height, floored at one step
 # --------------------------------------------------------------------------- #
 def test_make_size_key(make_group):
 	g = make_group()
-	assert g.make_size_key(_Item(size=12.0)) == 10
-	assert g.make_size_key(_Item(size=26.9)) == 30
-	assert g.make_size_key(_Item(size=1.0)) == 10   # floored at one reach
-	assert g.make_size_key(_Item(size=28.0)) == g.make_size_key(_Item(size=31.0)) == 30
+	assert g.make_size_key(_Item(size=12.0)) == 1
+	assert g.make_size_key(_Item(size=26.9)) == 3
+	assert g.make_size_key(_Item(size=1.0)) == 1   # floored at one step
+	assert g.make_size_key(_Item(size=28.0)) == g.make_size_key(_Item(size=31.0)) == 3
+
+
+def test_tiers_do_not_depend_on_the_resolution(make_group):
+	"""The same layout at 1023 and 873 px high lands every member in the same tier."""
+	g = make_group()
+	sizes = (112.0, 96.0, 61.0, 52.0, 34.0, 22.0)
+
+	def keys(height):
+		items = [_Item(size=s * height / 1023) for s in sizes]
+		for i in items:
+			i.tierReference = height
+		return [g.make_size_key(i) for i in items]
+
+	assert keys(1023) == keys(873) == keys(1440)
 
 
 # --------------------------------------------------------------------------- #

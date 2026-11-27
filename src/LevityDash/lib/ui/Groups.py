@@ -104,6 +104,11 @@ def _vertical_alignment(item: SizeGroupItem):
 class SizeGroup:
 	__groups__: ClassVar[List['SizeGroup']] = []
 	reach: float = 10
+	#: How wide a size tier is, as a share of the dashboard's height. Tiers are relative so a dashboard keeps the same
+	#: tier structure at any resolution. A fixed 10 px step did not: it is 1% of a 1023 px window but 1.15% of an 873 px
+	#: one, and at the smaller size the room temperatures fell into the same tier as the smaller numbers and shrank to
+	#: match. 10 / 1023 is that step on the display the dashboards were tuned on, so they tier as they always did there.
+	tierStep: float = 10 / 1023
 	#: The `@name` this group was asked for when no ancestor has that name, so it is a group of its own. Set by `Panel.getAttrGroup`; tools read it.
 	unresolvedScope: Optional[str] = None
 
@@ -267,14 +272,30 @@ class SizeGroup:
 		ys = [i.getTextScenePosition().y() for i in aligned]
 		return sum(ys) / len(ys) if ys else None
 
+	def tier_reference(self, item: SizeGroupItem) -> float:
+		"""The length a size is measured against to pick a tier: the height of the dashboard the item is in.
+
+		An item may name its own as ``tierReference``. With neither (an item outside a scene), 1 leaves the
+		size to be read as it is.
+		"""
+		reference = getattr(item, 'tierReference', None)
+		if reference is None:
+			try:
+				reference = item.scene().sceneRect().height()
+			except (AttributeError, RuntimeError, TypeError):
+				reference = None
+		return float(reference) if reference and reference > 0 else 1.0
+
 	def make_size_key(self, item: SizeGroupItem) -> int:
+		"""The size tier of ``item``: its height in steps of ``tierStep`` of the dashboard's height, so the key is the
+		same for the same layout at any resolution."""
 		if not isinstance(item, SizeGroupItem):
 			raise TypeError(f'item must be a SizeGroupItem, not {type(item)}')
-		reach = self.reach
 		# An item may name the height that picks its tier apart from the one that sizes its font
 		# (a value with a unit line is shorter than one without, but belongs with it).
 		height = getattr(item, 'tierHeight', item.suggestedFontPixelSize)
-		return max(int(round(height / reach) * reach), reach)
+		step = self.tierStep * self.tier_reference(item)
+		return max(int(round(height / step)), 1)
 
 	def apply(self):
 		"""Invalidate this group and re-apply its fit to every member now."""
