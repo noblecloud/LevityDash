@@ -1,0 +1,358 @@
+# Grid packing: what the engine does with cards of different sizes.
+# Four boards. Each card has its own tint — a theme series colour, as a 0.22 fill and a 0.85 border —
+# so a card is easy to follow from one board to the next. A card is a small vertical stack holding a
+# glyph and its span, so no plugin data is needed.
+# Render: render_dashboard.py OUT.png --levity THIS --seed DIR --size 2880x1800
+#
+# The pair at the top is the one to compare: the same cards, the same order, the same tints, with
+# `dense` the only difference. A card with a span reserves more than one cell; an auto-placed card
+# takes the next free cell. Without `dense` the placement cursor never goes back, so a hole left by a
+# wide card stays empty. With `dense: true` a later, smaller card drops into that hole.
+- type: group
+  name: main
+  items:
+    - type: text
+      name: headSparse
+      text: 'A · sparse — a span that does not fit leaves a hole the cursor never returns to'
+      color: $muted
+      geometry: {x: 2%, y: 1%, width: 46%, height: 3.5%}
+
+    - type: grid
+      name: sparse
+      geometry: {x: 2%, y: 5%, width: 46%, height: 38%}
+      spacing: 12px
+      grid: {columns: [1fr, 1fr, 1fr, 1fr, 1fr, 1fr], rows: [1fr, 1fr, 1fr, 1fr]}
+      items:
+        - type: stack
+          grid: {column-span: 2, row-span: 2}
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-1, opacity: 0.85, fill: {color: $series-1, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:sun}
+            - {type: text, text: '2×2'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-2, opacity: 0.85, fill: {color: $series-2, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:bolt}
+            - {type: text, text: '1×1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-3, opacity: 0.85, fill: {color: $series-3, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:wind}
+            - {type: text, text: '1×1'}
+        - type: stack
+          grid: {column-span: 3}
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-4, opacity: 0.85, fill: {color: $series-4, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:battery}
+            - {type: text, text: '3×1 waits'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-5, opacity: 0.85, fill: {color: $series-5, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:car}
+            - {type: text, text: '1×1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-6, opacity: 0.85, fill: {color: $series-6, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:plant}
+            - {type: text, text: '1×1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-1, opacity: 0.85, fill: {color: $series-1, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:music}
+            - {type: text, text: '1×1'}
+        - type: stack
+          grid: {column-span: 2}
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-2, opacity: 0.85, fill: {color: $series-2, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:router}
+            - {type: text, text: '2×1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-3, opacity: 0.85, fill: {color: $series-3, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:server}
+            - {type: text, text: '1×1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-4, opacity: 0.85, fill: {color: $series-4, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:box}
+            - {type: text, text: '1×1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-5, opacity: 0.85, fill: {color: $series-5, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:star}
+            - {type: text, text: '1×1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-6, opacity: 0.85, fill: {color: $series-6, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:moon}
+            - {type: text, text: '1×1'}
+
+    - type: text
+      name: headDense
+      text: 'B · dense — the same cards and tints, the same order; a later card takes the earlier hole'
+      color: $muted
+      geometry: {x: 52%, y: 1%, width: 46%, height: 3.5%}
+
+    - type: grid
+      name: dense
+      geometry: {x: 52%, y: 5%, width: 46%, height: 38%}
+      spacing: 12px
+      grid: {columns: [1fr, 1fr, 1fr, 1fr, 1fr, 1fr], rows: [1fr, 1fr, 1fr, 1fr], dense: true}
+      items:
+        - type: stack
+          grid: {column-span: 2, row-span: 2}
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-1, opacity: 0.85, fill: {color: $series-1, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:sun}
+            - {type: text, text: '2×2'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-2, opacity: 0.85, fill: {color: $series-2, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:bolt}
+            - {type: text, text: '1×1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-3, opacity: 0.85, fill: {color: $series-3, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:wind}
+            - {type: text, text: '1×1'}
+        - type: stack
+          grid: {column-span: 3}
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-4, opacity: 0.85, fill: {color: $series-4, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:battery}
+            - {type: text, text: '3×1 waits'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-5, opacity: 0.85, fill: {color: $series-5, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:car}
+            - {type: text, text: '1×1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-6, opacity: 0.85, fill: {color: $series-6, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:plant}
+            - {type: text, text: '1×1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-1, opacity: 0.85, fill: {color: $series-1, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:music}
+            - {type: text, text: '1×1'}
+        - type: stack
+          grid: {column-span: 2}
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-2, opacity: 0.85, fill: {color: $series-2, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:router}
+            - {type: text, text: '2×1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-3, opacity: 0.85, fill: {color: $series-3, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:server}
+            - {type: text, text: '1×1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-4, opacity: 0.85, fill: {color: $series-4, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:box}
+            - {type: text, text: '1×1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-5, opacity: 0.85, fill: {color: $series-5, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:star}
+            - {type: text, text: '1×1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-6, opacity: 0.85, fill: {color: $series-6, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:moon}
+            - {type: text, text: '1×1'}
+
+    - type: text
+      name: headColumn
+      text: 'C · auto-flow: column — fill a column top to bottom, then the next'
+      color: $muted
+      geometry: {x: 2%, y: 46%, width: 46%, height: 3.5%}
+
+    - type: grid
+      name: columnFlow
+      geometry: {x: 2%, y: 50%, width: 46%, height: 22%}
+      spacing: 12px
+      grid: {columns: [1fr, 1fr, 1fr, 1fr], rows: [1fr, 1fr, 1fr], auto-flow: column}
+      items:
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-1, opacity: 0.85, fill: {color: $series-1, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:sun}
+            - {type: text, text: '1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-2, opacity: 0.85, fill: {color: $series-2, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:bolt}
+            - {type: text, text: '2'}
+        - type: stack
+          grid: {row-span: 2}
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-3, opacity: 0.85, fill: {color: $series-3, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:battery}
+            - {type: text, text: '3 · two rows'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-4, opacity: 0.85, fill: {color: $series-4, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:wind}
+            - {type: text, text: '4'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-5, opacity: 0.85, fill: {color: $series-5, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:car}
+            - {type: text, text: '5'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-6, opacity: 0.85, fill: {color: $series-6, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:plant}
+            - {type: text, text: '6'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-1, opacity: 0.85, fill: {color: $series-1, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:music}
+            - {type: text, text: '7'}
+
+    - type: text
+      name: headFit
+      text: 'D · repeat(auto-fit, minmax(150px, 1fr)) — as many columns as the width holds; extra cards wrap'
+      color: $muted
+      geometry: {x: 52%, y: 46%, width: 46%, height: 3.5%}
+
+    - type: grid
+      name: autoFit
+      geometry: {x: 52%, y: 50%, width: 46%, height: 22%}
+      spacing: 12px
+      grid: {columns: 'repeat(auto-fit, minmax(150px, 1fr))', rows: [1fr]}
+      items:
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-1, opacity: 0.85, fill: {color: $series-1, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:sun}
+            - {type: text, text: '1'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-2, opacity: 0.85, fill: {color: $series-2, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:bolt}
+            - {type: text, text: '2'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-3, opacity: 0.85, fill: {color: $series-3, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:wind}
+            - {type: text, text: '3'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-4, opacity: 0.85, fill: {color: $series-4, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:battery}
+            - {type: text, text: '4'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-5, opacity: 0.85, fill: {color: $series-5, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:car}
+            - {type: text, text: '5'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-6, opacity: 0.85, fill: {color: $series-6, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:plant}
+            - {type: text, text: '6'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-1, opacity: 0.85, fill: {color: $series-1, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:music}
+            - {type: text, text: '7'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-2, opacity: 0.85, fill: {color: $series-2, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:router}
+            - {type: text, text: '8'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-3, opacity: 0.85, fill: {color: $series-3, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:server}
+            - {type: text, text: '9'}
+        - type: stack
+          direction: vertical
+          spacing: 2px
+          border: {enabled: true, edges: all, radius: 12px, weight: 1.5, color: $series-4, opacity: 0.85, fill: {color: $series-4, alpha: 0.22}}
+          items:
+            - {type: text, icon: tb:box}
+            - {type: text, text: '10'}
