@@ -12,10 +12,10 @@ from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QConicalGradient, QFontMetricsF, QPainter, QPainterPath, QPen, QRadialGradient, QTransform
 
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.draw import (
-	Look, _alpha, _compass, _font, _haloText, _ringLabels, _rings, _spokes, _text, _qtAngle, plotCircle,
+	Look, _alpha, _font, _haloText, _text, _qtAngle, plotCircle,
 )
 from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar import glyphs as glyphSet
-from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.geometry import niceStep, polarPoint
+from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.geometry import compassName, niceStep, polarPoint
 
 __all__ = ['Blip', 'drawRadar', 'ringValues', 'label']
 
@@ -32,6 +32,21 @@ class Blip:
 	kind: str = ''  # ICAO type designator (B738), for the silhouette
 	category: str = ''  # ADS-B emitter category (A3), for the silhouette when the type is unknown
 	slot: int = 0  # which slot it came from, so a click can read the rest of that slot
+
+
+# Every size on the radar is a share of the plot's short side, so it scales with the card and the display. Two tiers of
+# text: ROOM (ring distances and the cardinals, read across the room) and DETAIL (callsigns, intercardinals, the count,
+# read standing in front of it).
+_ROOM, _DETAIL = 1.2, 0.92
+_BLIP = 0.1  # a silhouette's half-size, as a share of the radius
+
+
+def _fontPx(rect: QRectF) -> float:
+	return max(9.0, min(rect.width(), rect.height()) / 22)
+
+
+def _blipHalf(radius: float, glyphSize: float = 1.0, glyphScale: float = 1.0) -> float:
+	return max(8.0, radius * _BLIP) * glyphSize * glyphScale
 
 
 def _drawPaths(painter: QPainter, look: Look, cx: float, cy: float, radius: float, top: float,
@@ -63,11 +78,11 @@ def hitBlip(rect: QRectF, blips: Sequence[Blip], top: float, pos: QPointF, slack
 	"""
 	if not blips or top <= 0:
 		return None
-	fontPx = max(8.0, min(rect.width(), rect.height()) / 28)
-	cx, cy, radius = plotCircle(rect, fontPx * 2.2)
+	fontPx = _fontPx(rect)
+	cx, cy, radius = plotCircle(rect, fontPx * 1.9)
 	if radius < 12:
 		return None
-	reach = max(7.0, radius * 0.075) * 2 + slack
+	reach = _blipHalf(radius) * 2 + slack
 	found, nearest = None, float('inf')
 	for blip in blips:
 		if blip.distance > top:
@@ -99,7 +114,7 @@ def drawPopover(
 	]) + pad * 2
 	height = titleMetrics.height() + lineHeight * len(rows) + pad * 1.6
 
-	cx, cy, radius = plotCircle(rect, fontPx * 2.2)
+	cx, cy, radius = plotCircle(rect, _fontPx(rect) * 2.1)
 	x, y = polarPoint(cx, cy, radius * min(blip.distance / top, 1.0) if top > 0 else 0.0, blip.bearing)
 	left = x + fontPx * 1.6
 	if left + width > rect.right() - 2:
@@ -132,6 +147,66 @@ def label(blip: Blip, altitudes: bool) -> str:
 	return blip.name
 
 
+def _radarRings(painter: QPainter, look: Look, cx: float, cy: float, outer: float, values, toRadius) -> None:
+	"""Rings in the accent, bright enough to count against the disc's glow."""
+	painter.setPen(QPen(_alpha(look.accent, 0.45), max(1.5, outer * 0.007)))
+	painter.setBrush(Qt.BrushStyle.NoBrush)
+	for value in values:
+		radius = toRadius(value)
+		painter.drawEllipse(QPointF(cx, cy), radius, radius)
+
+
+def _radarSpokes(painter: QPainter, look: Look, cx: float, cy: float, outer: float, count: int) -> None:
+	"""Spokes: the four cardinals stronger than the rest, all weaker than the rings."""
+	for i in range(count):
+		cardinal = i % (count // 4) == 0
+		painter.setPen(QPen(_alpha(look.accent, 0.3 if cardinal else 0.14), max(1.0, outer * (0.005 if cardinal else 0.003))))
+		painter.drawLine(QPointF(cx, cy), QPointF(*polarPoint(cx, cy, outer, i * 360 / count)))
+
+
+def _radarCompass(painter: QPainter, look: Look, cx: float, cy: float, radius: float, points: int, fontPx: float) -> None:
+	"""Compass letters round the rim: the cardinals at room size and bold, the rest at detail size, all legible."""
+	for i in range(points):
+		degrees = i * 360 / points
+		name = compassName(degrees, points)
+		cardinal = len(name) == 1
+		font = _font(look.display, fontPx * (_ROOM if cardinal else _DETAIL * 0.85), bold=True)
+		x, y = polarPoint(cx, cy, radius + fontPx * (1.0 if cardinal else 0.85), degrees)
+		_text(painter, name, x, y, look.text if cardinal else _alpha(look.text, 0.75), font)
+
+
+def _radarRingLabels(
+	painter: QPainter, look: Look, cx: float, cy: float, radius: float, values, toRadius, fontPx: float,
+	unit: str, avoid: Sequence[tuple[float, float]],
+) -> None:
+	"""Ring distances in bold at room size, set on the rings between two spokes, in whichever quadrant has the
+	fewest blips near its labels (so they are not buried)."""
+	if not values:
+		return
+	font = _font(look.mono, fontPx, bold=True)
+	clear = fontPx * 3.5
+
+	def crowd(degrees: float) -> float:
+		return sum(
+			max(0.0, 1.0 - math.hypot(px - x, py - y) / clear)
+			for value in values for x, y in [polarPoint(cx, cy, toRadius(value), degrees)] for px, py in avoid
+		)
+
+	# Between spokes (which run every 30 degrees), so a label never sits on a spoke.
+	degrees = min((15.0 + 30.0 * i for i in range(12)), key=lambda d: (round(crowd(d), 2), abs(d - 195.0)))
+	for value in values:
+		text = f'{value:g}'
+		metrics = QFontMetricsF(font)
+		w, h = metrics.horizontalAdvance(text) + fontPx * 0.5, metrics.height() * 0.95
+		# one on the rim is pulled inside it, so it does not cover the compass letters just beyond
+		x, y = polarPoint(cx, cy, min(toRadius(value), radius - h * 0.75), degrees)
+		pill = QRectF(x - w / 2, y - h / 2, w, h)
+		painter.setPen(QPen(_alpha(look.accent, 0.55), max(1.0, radius * 0.004)))
+		painter.setBrush(QColor(0, 0, 0, 175))
+		painter.drawRoundedRect(pill, h / 2, h / 2)
+		_text(painter, text, x, y, look.text, font)
+
+
 def drawRadar(
 	painter: QPainter, look: Look, rect: QRectF, blips: Sequence[Blip], top: float, rings: int, compass: int,
 	colorFor: Callable[[float], QColor], labels: int, altitudes: bool = True, sweep: Optional[float] = None,
@@ -145,8 +220,8 @@ def drawRadar(
 	gives. ``paths`` are the trails, each ``(age, bearing, distance)`` oldest first, painted under the blips and fading
 	with age. ``top`` is the distance of the rim. ``sweep`` is the sweep line's bearing in degrees, or None for no sweep: a
 	wedge of light that trails it and brightens the blips it has just passed."""
-	fontPx = max(8.0, min(rect.width(), rect.height()) / 28)
-	cx, cy, radius = plotCircle(rect, fontPx * 2.2)
+	fontPx = _fontPx(rect)
+	cx, cy, radius = plotCircle(rect, fontPx * 1.9)
 	if radius < 12 or top <= 0:
 		return
 	toRadius = lambda value: radius * min(value / top, 1.0)
@@ -161,12 +236,12 @@ def drawRadar(
 	painter.drawEllipse(QPointF(cx, cy), radius, radius)
 
 	values = ringValues(top, rings)
-	_spokes(painter, look, cx, cy, 0, radius, 12)
-	_rings(painter, look, cx, cy, radius, values, toRadius)
+	_radarSpokes(painter, look, cx, cy, radius, 12)
+	_radarRings(painter, look, cx, cy, radius, values, toRadius)
 	painter.setPen(QPen(_alpha(look.accent, 0.8), max(1.5, radius * 0.006)))
 	painter.setBrush(Qt.BrushStyle.NoBrush)
 	painter.drawEllipse(QPointF(cx, cy), radius, radius)
-	_compass(painter, look, cx, cy, radius, compass, fontPx)
+	_radarCompass(painter, look, cx, cy, radius, compass, fontPx)
 
 	if sweep is not None:
 		wedge = QConicalGradient(QPointF(cx, cy), _qtAngle(sweep) + 0.0)
@@ -191,15 +266,15 @@ def drawRadar(
 		color = colorFor(blip.altitude)
 		if glyphs:
 			glyph = glyphSet.classify(blip.kind, blip.category)
-			half = max(7.0, radius * 0.075) * glyph.size * glyphScale
+			half = _blipHalf(radius, glyph.size, glyphScale)
 			halo = QRadialGradient(QPointF(x, y), half * 2.2)
-			halo.setColorAt(0.0, _alpha(color, 0.38))
+			halo.setColorAt(0.0, _alpha(color, 0.5))
 			halo.setColorAt(1.0, _alpha(color, 0.0))
 			painter.setPen(Qt.PenStyle.NoPen)
 			painter.setBrush(QBrush(halo))
 			painter.drawEllipse(QPointF(x, y), half * 2.2, half * 2.2)
 			turn = QTransform().translate(x, y).rotate(blip.heading if blip.speed > 0 else 0.0).scale(half * 2, half * 2)
-			painter.setPen(QPen(QColor(0, 0, 0, 210), max(0.8, half * 0.07), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+			painter.setPen(QPen(QColor(0, 0, 0, 235), max(1.0, half * 0.1), Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
 			painter.setBrush(color)
 			painter.drawPath(turn.map(glyphSet.path(glyph.shape)))
 			continue
@@ -218,23 +293,47 @@ def drawRadar(
 		painter.setBrush(color)
 		painter.drawEllipse(QPointF(x, y), size, size)
 
-	# Names, nearest first, each dropped when it would sit on one already written.
+	# Names, nearest first. Each tries the right of its blip, then the left, above, below; one that fits nowhere
+	# clear of the blips and the names already written is dropped.
+	taken: list[QRectF] = [
+		QRectF(*polarPoint(cx, cy, toRadius(b.distance), b.bearing), 0, 0).adjusted(-half, -half, half, half)
+		for b in drawn for half in [_blipHalf(radius, glyphSet.classify(b.kind, b.category).size if glyphs else 0.3, glyphScale)]
+	]
 	if labels > 0:
-		font = _font(look.mono, fontPx * 0.72)
+		font = _font(look.mono, fontPx * _DETAIL, bold=True)
 		metrics = QFontMetricsF(font)
-		taken: list[QRectF] = []
+		gap = fontPx * 0.25
+		bounds = QRectF(rect).adjusted(0, 0, 0, -fontPx * 1.6)
 		for blip in sorted(drawn, key=lambda b: b.distance)[:labels]:
 			x, y = polarPoint(cx, cy, toRadius(blip.distance), blip.bearing)
-			text = label(blip, altitudes)
-			width, height = metrics.horizontalAdvance(text), metrics.height()
-			onRight = x < cx + radius * 0.55
-			box = QRectF(x + fontPx * 0.7 if onRight else x - fontPx * 0.7 - width, y - height * 1.05, width, height)
-			if any(box.adjusted(-2, -1, 2, 1).intersects(other) for other in taken):
-				continue
-			taken.append(box)
-			_haloText(painter, text, box.center().x(), box.center().y(), look.text, font)
+			half = _blipHalf(radius, glyphSet.classify(blip.kind, blip.category).size if glyphs else 0.3, glyphScale)
+			name, altitude = blip.name, ''
+			if altitudes and blip.altitude > 0:
+				altitude = f' {round(blip.altitude / 100):d}'
+			width, height = metrics.horizontalAdvance(name + altitude), metrics.height()
+			reach = half + gap
+			for box in (
+				QRectF(x + reach, y - height / 2, width, height), QRectF(x - reach - width, y - height / 2, width, height),
+				QRectF(x - width / 2, y - reach - height, width, height), QRectF(x - width / 2, y + reach, width, height),
+			):
+				mine = box.adjusted(-gap, -gap * 0.5, gap, gap * 0.5)
+				if not bounds.contains(mine):
+					continue
+				# a plane's own box is in ``taken`` as well, but a label starts clear of it
+				if any(mine.intersects(other) for other in taken if not other.contains(QPointF(x, y))):
+					continue
+				taken.append(mine)
+				_haloText(painter, name, box.left() + metrics.horizontalAdvance(name) / 2, box.center().y(), look.text, font)
+				if altitude:
+					_haloText(
+						painter, altitude, box.left() + metrics.horizontalAdvance(name) + metrics.horizontalAdvance(altitude) / 2,
+						box.center().y(), colorFor(blip.altitude).lighter(125), font,
+					)
+				break
 
-	_ringLabels(painter, look, cx, cy, values, toRadius, lambda v: f'{v:g}', fontPx * 1.1, degrees=202)
+	_radarRingLabels(painter, look, cx, cy, radius, values, toRadius, fontPx * _ROOM, unit, [
+		polarPoint(cx, cy, toRadius(b.distance), b.bearing) for b in drawn
+	])
 
 	# You, in the middle.
 	painter.setPen(QPen(look.text, max(1.0, radius * 0.005)))
@@ -243,4 +342,4 @@ def drawRadar(
 
 	if legend:
 		note = f'{len(blips)} in range · {unit}'
-		_text(painter, note, rect.left() + fontPx * 0.4, rect.bottom() - fontPx * 0.8, look.muted, _font(look.mono, fontPx * 0.9), 'left')
+		_text(painter, note, rect.left() + fontPx * 0.4, rect.bottom() - fontPx * 0.8, look.text, _font(look.mono, fontPx * 1.05, bold=True), 'left')
