@@ -3,7 +3,7 @@
 ```yaml
 - type: map
   layer: radar                # radar | temperature | wind | clouds | none
-  zoom: 6                     # 1 world .. 16 street; radar data stops at 7 and is stretched past that
+  zoom: 7                     # 1 world .. 16 street; radar data stops at 7 and is stretched past that
   lat: 40.7                   # the centre; both left out: [Location] from the config
   lon: -74.0
   basemap: auto               # auto | dark | light | none; auto follows the theme's background
@@ -143,7 +143,7 @@ class WeatherMap(Panel, tag='map'):
 		self._layer = 'radar'
 		self._lat: Optional[float] = None
 		self._lon: Optional[float] = None
-		self._zoom = 6.0
+		self._zoom = 7.0
 		self._basemap = 'auto'
 		self._labels = True
 		self._opacity: Optional[float] = None
@@ -432,7 +432,7 @@ class WeatherMap(Panel, tag='map'):
 			raise ValueError(f'lon is -180 to 180, not {value}')
 		return value
 
-	@StateProperty(key='zoom', default=6.0, allowNone=False, after=_reload)
+	@StateProperty(key='zoom', default=7.0, allowNone=False, after=_reload)
 	def zoom(self) -> float:
 		return self._zoom
 

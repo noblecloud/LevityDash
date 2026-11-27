@@ -5,7 +5,7 @@
 ```yaml
 - type: map
   layer: radar            # radar | temperature | wind | clouds | none
-  zoom: 6                 # 1 world .. 16 street
+  zoom: 7                 # 1 world .. 16 street
   lat: 40.7               # left out: [Location] from your config
   lon: -74.0
 ```
@@ -16,7 +16,7 @@ A map with no `lat` and `lon` is centred on `[Location]`, and a dot marks that p
 |---|---|---|
 | `layer` | `radar` | `radar`, `temperature`, `wind`, `clouds`, or `none` for just the base map. |
 | `lat`, `lon` | `[Location]` | The centre. |
-| `zoom` | `6` | 1 shows the world, 16 a street. Fractions are fine. Radar data stops at 7 and is stretched past that. |
+| `zoom` | `7` | 1 shows the world, 16 a street. Fractions are fine. Radar data stops at 7 and is stretched past that. |
 | `basemap` | `auto` | `auto` follows the theme's background (dark or light), or choose `dark`, `light`; `none` draws the layer on the dashboard itself. |
 | `labels` | `true` | Place names over the data. |
 | `opacity` | `0.92` radar, `0.74` fields | How solid the data layer is, `0` to `1`. |

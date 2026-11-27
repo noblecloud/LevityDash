@@ -1,6 +1,6 @@
 - type: map
   name: map
   layer: temperature
-  lat: 40.0
-  lon: -88.0
-  zoom: 5
+  lat: 40.7
+  lon: -74.0
+  zoom: 7
