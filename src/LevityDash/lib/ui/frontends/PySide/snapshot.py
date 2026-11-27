@@ -5,11 +5,16 @@ card (about 6,000 on the home showcase). `renderSubtree` paints the subtree once
 order, and `Snapshot` shows that pixmap in the item's place while the real items are made transparent, which Qt
 skips without walking their children.
 
+The subtree is taken by walking the item tree, never from the scene's item index (`scene.items(region)`): that
+index only covers the scene rectangle, so an item parked outside it - a band card waiting off screen for its turn
+- comes back as nothing at all, and the picture is blank. The card then shows an empty slot for the whole move
+and pops back in when the move ends.
+
 Things a plain walk cannot draw the way the scene does are refused rather than approximated: an item with a
 `QGraphicsEffect` (a drop shadow or blur is drawn by the scene, not by `paint`) makes `renderSubtree` return None,
 and the caller animates the real items as before.
 """
-from typing import Optional, Tuple
+from typing import Iterator, Optional, Tuple
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QPainter, QPixmap, QTransform
@@ -32,6 +37,18 @@ def _extent(root: QGraphicsItem) -> QRectF:
 	return rect
 
 
+def _paintOrder(root: QGraphicsItem) -> Iterator[QGraphicsItem]:
+	"""`root` and every descendant, in the order the scene paints them: an item, then its children by `z`
+
+	`childItems()` is already in stacking order, and a stable sort by `zValue()` keeps that order among equals,
+	which is how Qt orders siblings too. The tree is walked rather than the scene index so an item outside the
+	scene rectangle is still found.
+	"""
+	yield root
+	for child in sorted(root.childItems(), key=lambda item: item.zValue()):
+		yield from _paintOrder(child)
+
+
 def renderSubtree(root: QGraphicsItem, scale: float) -> Optional[Tuple[QPixmap, QRectF]]:
 	"""Paint `root` and its visible descendants into a pixmap with `scale` device pixels per unit of `root`.
 
@@ -44,11 +61,7 @@ def renderSubtree(root: QGraphicsItem, scale: float) -> Optional[Tuple[QPixmap, 
 	local = _extent(root)
 	if local.isEmpty() or local.width() * local.height() * scale * scale > MAX_PIXELS:
 		return None
-	region = root.mapRectToScene(local)
-	items = [
-		item for item in scene.items(region, Qt.ItemSelectionMode.IntersectsItemBoundingRect, Qt.SortOrder.AscendingOrder)
-		if item is root or root.isAncestorOf(item)
-	]
+	items = list(_paintOrder(root))
 	for item in items:
 		effect = item.graphicsEffect()
 		if effect is not None and effect.isEnabled() and item.isVisible():

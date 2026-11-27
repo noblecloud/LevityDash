@@ -155,6 +155,43 @@ def test_stopping_mid_step_restores_items(dashboard, slot):
 	assert all(c.opacity() == 1.0 for c in band.choices)
 
 
+def test_a_move_cut_short_lands_on_a_slot(dashboard, slot):
+	"""An item's `when:` changing mid-move stops the clock. The ring must land on a whole slot: a fractional
+	position leaves every card off-grid for the rest of the lap."""
+	band = make(slot, mode='step', transition='2s')
+	pump(dashboard.app, 0.3)
+	stride = band.rect().width() / 3
+	band._dwellTimer.stop()
+	band._advance()
+	pump(dashboard.app, 0.4)
+	assert band.position != round(band.position)  # mid-move, between two slots
+	band._stopClock()
+	assert band.position == pytest.approx(round(band.position))
+	for card in band.shown:
+		slot_index = (card.pos().x() + card.transform().dx()) / stride
+		assert slot_index == pytest.approx(round(slot_index), abs=0.02)
+
+
+def test_a_picture_is_drawn_for_a_card_outside_the_scene(dashboard, slot):
+	"""A step band slides a picture of each card, and the picture must not depend on the scene's item index:
+	that index only covers the scene rectangle, so a card parked outside it - one waiting its turn, or the
+	card about to come in - used to come back as an empty pixmap. Its slot was then blank for the whole move
+	and the card popped into view when the move ended."""
+	from PySide6.QtGui import QTransform
+	from LevityDash.lib.ui.frontends.PySide.snapshot import renderSubtree
+	band = make(slot, mode='step')
+	pump(dashboard.app, 0.3)
+	card = child(band, 'c0')
+	card.setTransform(QTransform.fromTranslate(4000.0, 0.0))
+	assert card.sceneBoundingRect().left() > dashboard.scene.sceneRect().right()
+	drawn = renderSubtree(card, 1.0)
+	assert drawn is not None
+	pixmap, _ = drawn
+	image = pixmap.toImage().convertToFormat(pixmap.toImage().Format.Format_ARGB32)
+	bits = image.constBits()
+	assert any(bits[i] for i in range(3, len(bits), 4)), 'the picture of a card outside the scene came out blank'
+
+
 def test_no_pictures_with_cache_off(dashboard, slot):
 	band = make(slot, mode='step', transition='300ms', cache=False)
 	pump(dashboard.app, 0.3)

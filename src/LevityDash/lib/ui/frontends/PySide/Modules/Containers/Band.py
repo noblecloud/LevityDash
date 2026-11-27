@@ -208,10 +208,16 @@ class Band(Panel, tag='band'):
 	def _stopClock(self) -> None:
 		self._dwellTimer.stop()
 		self._frameTimer.stop()
-		if self._animation is not None:
-			self._animation.stop()
-			self._animation = None
+		animation, self._animation = self._animation, None
+		if animation is not None:
+			animation.stop()
+			# A move cut short (an item's `when:` changed, the band was hidden, the dashboard reloaded)
+			# leaves the ring between two slots; land it on the nearer one, or every card stays a fraction
+			# of a stride off for the rest of the lap.
+			self._position = float(round(self._position))
 		self._thaw()
+		if animation is not None:
+			self.place(self._position)
 
 	def _frame(self) -> None:
 		if not self._wanted():
