@@ -6,8 +6,8 @@
 - type: map
   layer: radar            # radar | temperature | wind | clouds | none
   zoom: 7                 # 1 world .. 16 street
-  lat: 40.7               # left out: [Location] from your config
-  lon: -74.0
+  # lat: 40.7             # the centre; left out it is [Location] from your config
+  # lon: -74.0
 ```
 
 A map with no `lat` and `lon` is centred on `[Location]`, and a dot marks that place.

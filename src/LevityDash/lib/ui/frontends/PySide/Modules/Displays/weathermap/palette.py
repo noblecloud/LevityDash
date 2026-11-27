@@ -28,8 +28,8 @@ Stop = tuple[float, float, float, float, float]
 #: Precipitation, from the first trace of drizzle to a hail core. `t` is the fraction of the reflectivity scale.
 PRECIP: tuple[Stop, ...] = (
 	(0.00, 0.84, 0.060, 200, 0.00),
-	(0.03, 0.86, 0.090, 195, 0.30),
-	(0.16, 0.80, 0.130, 208, 0.62),
+	(0.03, 0.88, 0.110, 195, 0.50),
+	(0.16, 0.82, 0.150, 208, 0.78),
 	(0.34, 0.70, 0.170, 235, 0.76),
 	(0.52, 0.58, 0.220, 270, 0.86),
 	(0.70, 0.60, 0.260, 320, 0.92),

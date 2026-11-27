@@ -571,7 +571,7 @@ class WeatherMap(Panel, tag='map'):
 		"""The colours sea and land are painted in: the theme's background, and that pulled a little towards its text."""
 		background, text = _rgb('background'), _rgb('text')
 		sea = background
-		land = background + (text - background)*(0.10 if base.dark else 0.07)
+		land = background + (text - background)*(0.17 if base.dark else 0.10)
 		return sea, land
 
 	def _baseImage(self, base: data.Basemap, spot) -> Optional[QImage]:
@@ -584,7 +584,8 @@ class WeatherMap(Panel, tag='map'):
 		image = self._tint.get(tint)
 		if image is None:
 			span = (base.land - base.water) or 1.0
-			t = np.clip((lum[0] - base.water)/span, 0.0, 1.6)[..., None]
+			t = (lum[0] - base.water)/span
+			t = np.clip(np.where(t > 1.0, 1.0 + (t - 1.0)*3.0, t), 0.0, 2.2)[..., None]  # borders and roads sit just above land: lift them
 			rgb = sea + (land - sea)*t
 			out = np.empty(rgb.shape[:2] + (4,), dtype=np.uint8)
 			out[..., :3] = np.clip(rgb, 0, 255).astype(np.uint8)
@@ -600,7 +601,7 @@ class WeatherMap(Panel, tag='map'):
 		tile = self._base.get(key)
 		if tile is None:
 			return None
-		color = theme.active().color('muted').QColor
+		color = theme.active().color('text').QColor
 		tint = (key, color.rgba())
 		image = self._tint.get(tint)
 		if image is None:
@@ -608,7 +609,7 @@ class WeatherMap(Panel, tag='map'):
 			strength = np.clip(lum*1.8, 0.0, 1.0)  # the glyphs are bright, their halo is not
 			out = np.empty(alpha.shape + (4,), dtype=np.uint8)
 			out[..., 0], out[..., 1], out[..., 2] = color.red(), color.green(), color.blue()
-			out[..., 3] = np.clip(alpha*strength*color.alpha(), 0, 255).astype(np.uint8)
+			out[..., 3] = np.clip(alpha*strength*color.alpha()*0.72, 0, 255).astype(np.uint8)
 			image = toImage(out)
 			_remember(self._tint, tint, image)
 		return image
