@@ -14,16 +14,19 @@ the old outline (kept with the transform it was shown with) into the item's new 
 """
 from __future__ import annotations
 
+import math
 import os
+import re
+import time
 from typing import NamedTuple, Optional
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QVariantAnimation
-from PySide6.QtGui import QBrush, QColor, QPainterPath, QPen, QTransform, QVector3D, Qt
+from PySide6.QtGui import QBrush, QColor, QFont, QPainterPath, QPen, QTransform, QVector3D, Qt
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem, QGraphicsRectItem, QGraphicsRotation, QGraphicsTransform
 from shiboken6 import isValid
 
 from LevityDash.lib.ui import Color
-from LevityDash.lib.ui.value_change import ChangeSpec, direction
+from LevityDash.lib.ui.value_change import ChangeSpec, deltaText, direction, number
 
 __all__ = ('ChangeAnimator', 'Before', 'enabled', 'glyphs')
 
@@ -408,6 +411,553 @@ class _Roll(_Effect):
 			item.setPath(self.full)
 
 
+class _ShiftX(QGraphicsTransform):
+	"""A horizontal offset in the parent's pixels, applied after the item's own transform."""
+
+	def __init__(self):
+		super().__init__()
+		self.dx = 0.0
+
+	def applyTo(self, matrix):
+		matrix.translate(self.dx, 0)
+
+	def setOffset(self, dx: float):
+		if dx != self.dx:
+			self.dx = dx
+			self.update()
+
+
+class _Stretch(QGraphicsTransform):
+	"""A vertical scale about a point, then a vertical offset, in the parent's pixels."""
+
+	def __init__(self, centre: QPointF):
+		super().__init__()
+		self.centre = centre
+		self.sy, self.dy = 1.0, 0.0
+
+	def applyTo(self, matrix):
+		matrix.translate(0, self.dy)
+		matrix.translate(self.centre.x(), self.centre.y(), 0)
+		matrix.scale(1, self.sy, 1)
+		matrix.translate(-self.centre.x(), -self.centre.y(), 0)
+
+	def set(self, sy: float, dy: float):
+		if sy != self.sy or dy != self.dy:
+			self.sy, self.dy = sy, dy
+			self.update()
+
+	def transform(self, sy: float = None, dy: float = None) -> QTransform:
+		"""The same map as a `QTransform` (the item's own, or the given scale and offset)."""
+		t = QTransform()
+		t.translate(0, self.dy if dy is None else dy)
+		t.translate(self.centre.x(), self.centre.y())
+		t.scale(1, self.sy if sy is None else sy)
+		t.translate(-self.centre.x(), -self.centre.y())
+		return t
+
+
+#: `glow`: halo layers as (stroke width, opacity at the peak), the width as a share of the text's height. The widest
+#: is faintest and swells last, so the halo seems to spread.
+GLOW_LAYERS = ((0.09, 0.30), (0.17, 0.18), (0.27, 0.10))
+#: `shake`: swings and how far, as a share of the text's height.
+SHAKE_SWINGS, SHAKE_AMPLITUDE = 3.5, 0.08
+#: `delta`: the badge's digit height as a share of the text's, and how far it floats, as a share of its own height.
+DELTA_SCALE, DELTA_RISE = 0.4, 0.9
+#: `blur`: the stretch the text starts or ends at, how far the new text starts below its place (share of height),
+#: and the spacing of the faint copies.
+BLUR_STRETCH, BLUR_RISE, BLUR_STEP = 0.15, 0.1, 0.05
+
+
+class _Glow(_Effect):
+	"""A halo of stacked wide strokes of the new outline behind the text; no graphics effect."""
+
+	def begin(self):
+		item = self.item
+		scale = abs(item.transform().m11()) or 1.0
+		height = item.path().boundingRect().height() * abs(item.transform().m22() or 1.0)
+		colour = Color.role('accent').QColor
+		self.layers = []
+		for width, peak in GLOW_LAYERS:
+			pen = QPen(colour, max(2.0, width * height) / scale)
+			pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+			pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+			layer = self.ghost(path=item.path(), brush=QBrush(Qt.BrushStyle.NoBrush), pen=pen, ownOpacity=False)
+			layer.setFlag(QGraphicsItem.GraphicsItemFlag.ItemStacksBehindParent, True)
+			self.layers.append((layer, peak))
+
+	def frame(self, t):
+		for index, (layer, peak) in enumerate(self.layers):
+			local = _clamp((t - 0.06 * index) / (1.0 - 0.06 * index))
+			# swell over the first third, fade over the rest
+			level = _smooth(local / 0.34) if local < 0.34 else (1.0 - _smooth((local - 0.34) / 0.66))
+			layer.setOpacity(peak * level)
+
+
+class _Shake(_Effect):
+	"""The new text shows at once and shakes sideways, a damped sine."""
+
+	def begin(self):
+		self.shift = _ShiftX()
+		self.item.setTransformations([self.shift])
+		self.amplitude = self.item.path().boundingRect().height() * abs(self.item.transform().m22() or 1.0) * SHAKE_AMPLITUDE
+
+	def frame(self, t):
+		self.shift.setOffset(self.amplitude * math.exp(-3.0 * t) * math.sin(2 * math.pi * SHAKE_SWINGS * t))
+
+
+class _Delta(_Effect):
+	"""A small badge with the difference floats up from the text's top right corner and fades."""
+
+	def begin(self):
+		item = self.item
+		self.label = deltaText(self.before.text, self.text)
+		token = 'good' if direction(self.before.text, self.text) > 0 else 'bad'
+		font = QFont(item.font())
+		reference = QPainterPath()
+		reference.addText(0, 0, font, '0')
+		ink = item.path().boundingRect()
+		path = QPainterPath()
+		path.addText(0, 0, font, self.label)
+		scale = DELTA_SCALE * ink.height() / (reference.boundingRect().height() or 1.0)
+		path = QTransform.fromScale(scale, scale).map(path)
+		rect = path.boundingRect()
+		gap = rect.height() * 0.25
+		# the badge's right edge on the text's, its bottom just above the text's top
+		path.translate(ink.right() - rect.right(), ink.top() - gap - rect.bottom())
+		self.rise = rect.height() * DELTA_RISE
+		# the badge floats above the text, outside the card a value usually fills and clips to: it lives in the
+		# scene itself, over everything, in scene pixels
+		toScene = item.sceneTransform()
+		path = toScene.map(path)
+		self.rise *= abs(toScene.m22()) or 1.0
+		badge = QGraphicsPathItem(path)
+		badge.setBrush(QBrush(Color.role(token).QColor))
+		badge.setPen(QPen(Qt.PenStyle.NoPen))
+		badge.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+		badge.setAcceptHoverEvents(False)
+		badge.setZValue(1e6)
+		if (scene := item.scene()) is not None:
+			scene.addItem(badge)
+		self.children.append(badge)
+		self.badge = badge
+
+	def frame(self, t):
+		self.badge.setPos(0, -self.rise * (1.0 - (1.0 - t) ** 2))
+		self.badge.setOpacity(min(1.0, t / 0.15) * (1.0 - _smooth(_clamp((t - 0.55) / 0.45))))
+
+
+class _Blur(_Effect):
+	"""A numeric-text swap: the old text fades out stretching, the new one fades in from a stretch and settles
+	upward. Faint offset copies (two a text) stand in for motion blur while it moves fastest."""
+
+	def begin(self):
+		item, before = self.item, self.before
+		self.curve = _motionCurve()
+		self.tr = _Stretch(self.centre())
+		item.setTransformations([self.tr])
+		height = item.path().boundingRect().height() * abs(item.transform().m22() or 1.0)
+		self.height, self.step = height, height * BLUR_STEP
+		self.old = self.ghost()
+		self.oldCopies = [self.ghost() for _ in (0, 1)]
+		self.newCopies = []
+		for _ in (0, 1):
+			copy = _child(item, item.path(), item.brush(), item.pen())
+			self.children.append(copy)
+			self.newCopies.append(copy)
+
+	def frame(self, t):
+		item, before = self.item, self.before
+		p = self.curve.valueForProgress(t)
+		sy, dy = 1.0 + BLUR_STRETCH * (1.0 - p), self.height * BLUR_RISE * (1.0 - p)
+		self.tr.set(sy, dy)
+		item.setOpacity(self.opacity * _smooth(_clamp((t - 0.1) / 0.6)))
+		oldOpacity = self.opacity * (1.0 - _smooth(_clamp(t / 0.6)))
+		self.old.setOpacity(oldOpacity)
+		inverse, ok = item.transform().inverted()
+		inverse = inverse if ok else QTransform()
+		undo, _ = self.tr.transform().inverted()
+		stretched = QTransform()
+		stretched.translate(self.tr.centre.x(), self.tr.centre.y())
+		stretched.scale(1, 1.0 + BLUR_STRETCH * _smooth(t))
+		stretched.translate(-self.tr.centre.x(), -self.tr.centre.y())
+		base = before.transform * stretched
+		self.old.setTransform(base * undo * inverse)
+		# motion blur: the old text smears while it leaves (first 40%), the new one trails while it arrives
+		leaving = _clamp(1.0 - t / 0.4)
+		for copy, k in zip(self.oldCopies, (-1, 1)):
+			copy.setOpacity(oldOpacity * 0.3 * leaving)
+			copy.setTransform(base * QTransform.fromTranslate(0, k * self.step) * undo * inverse)
+		arriving = _clamp(1.0 - p / 0.6)
+		local = self.step / (abs(item.transform().m22()) or 1.0)
+		for copy, k in zip(self.newCopies, (1, 2)):
+			copy.setOpacity(0.3 * arriving)
+			copy.setPos(0, k * local)
+class _Delegating(_Effect):
+	"""An effect that may find it cannot draw this change and hands it to another style (`fallback`) instead."""
+	fallback = _Fade
+
+	def __init__(self, *args):
+		super().__init__(*args)
+		self.inner: Optional[_Effect] = None
+		self.full: Optional[QPainterPath] = None
+
+	def usable(self) -> bool:
+		return True
+
+	def build(self):
+		pass
+
+	def begin(self):
+		if self.usable():
+			self.build()
+		else:
+			self.inner = self.fallback(self.item, self.before, self.text, self.spec)
+			self.inner.begin()
+
+	def frame(self, t: float):
+		if self.inner is not None:
+			self.inner.frame(t)
+		else:
+			self.draw(t)
+
+	def draw(self, t: float):
+		pass
+
+	def end(self):
+		item = self.item
+		if self.inner is not None:
+			self.inner.end()
+			self.inner = None
+		super().end()
+		if isValid(item) and self.full is not None:
+			item.setPath(self.full)
+
+	def root(self) -> QGraphicsRectItem:
+		"""One invisible parent for everything this effect adds, so the item has one child while it runs."""
+		root = QGraphicsRectItem(QRectF(), self.item)
+		root.setPen(QPen(Qt.PenStyle.NoPen))
+		root.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+		root.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+		self.children.append(root)
+		return root
+
+	def hideOutline(self):
+		self.full = QPainterPath(self.item.path())
+		self.item.setPath(QPainterPath())
+
+
+def _clipRect(parent) -> QGraphicsRectItem:
+	clip = QGraphicsRectItem(QRectF(), parent)
+	clip.setPen(QPen(Qt.PenStyle.NoPen))
+	clip.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+	clip.setFlag(QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape, True)
+	clip.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+	return clip
+
+
+class _Wipe(_Delegating):
+	"""An edge sweeps left to right: the new text shows behind it, the old text is wiped away by it."""
+
+	def build(self):
+		item, before = self.item, self.before
+		mapping = self.oldToNew()
+		self.hideOutline()
+		band = self.full.boundingRect().united(mapping.mapRect(before.path.boundingRect()))
+		pad = band.height() * 0.15
+		self.band = band.adjusted(-pad, -pad, pad, pad)
+		root = self.root()
+		self.fresh, self.stale = _clipRect(root), _clipRect(root)
+		_child(self.fresh, self.full, item.brush(), item.pen())
+		old = _child(self.stale, before.path, before.brush, before.pen)
+		old.setTransform(mapping)
+		self.draw(0.0)
+
+	def draw(self, t: float):
+		band = self.band
+		x = band.left() + band.width() * _smooth(t)
+		self.fresh.setRect(QRectF(band.left(), band.top(), x - band.left(), band.height()))
+		self.stale.setRect(QRectF(x, band.top(), band.right() - x, band.height()))
+
+
+class _Typewriter(_Delegating):
+	"""The new characters appear one at a time, left to right, each with a short fade."""
+	fallback = _Wipe
+	#: The longest a character may wait for the one before it, in seconds; a long string is spread over the duration.
+	STEP = 0.09
+	#: How long the old text takes to fade out, and how long each character takes to fade in, as shares of the duration.
+	OUT, IN = 0.15, 0.12
+
+	def usable(self) -> bool:
+		self.parts = glyphs(self.item.path())
+		return bool(self.parts) and len(self.parts) == len([c for c in self.text if not c.isspace()])
+
+	def build(self):
+		item = self.item
+		self.hideOutline()
+		root = self.root()
+		self.old = _child(root, self.before.path, self.before.brush, self.before.pen)
+		self.old.setTransform(self.oldToNew())
+		self.letters = []
+		for part in self.parts:
+			letter = _child(root, part.path, item.brush(), item.pen())
+			letter.setOpacity(0.0)
+			self.letters.append(letter)
+		count = len(self.letters)
+		room = 1.0 - self.IN - self.OUT * 0.5
+		self.step = min(room / count, self.STEP / max(0.05, self.spec.duration))
+		self.start = self.OUT * 0.5
+		self.draw(0.0)
+
+	def draw(self, t: float):
+		self.old.setOpacity(max(0.0, 1.0 - t / self.OUT))
+		for i, letter in enumerate(self.letters):
+			k = _clamp((t - self.start - i * self.step) / self.IN)
+			if letter.opacity() != k:
+				letter.setOpacity(k)
+
+
+class _Scramble(_Delegating):
+	"""A decode: each changed digit or letter shows random ones that settle, left to right, into the new character."""
+	fallback = _Fade
+	#: Random characters shown per column, and how often the shown one changes.
+	VARIANTS, RATE = 6, 20
+	#: When the first and the last changed column settle, as shares of the duration.
+	FIRST, LAST = 0.3, 0.9
+	DIGITS, UPPER = '0123456789', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+	def usable(self) -> bool:
+		self.old = glyphs(self.before.path)
+		self.new = glyphs(self.item.path())
+		self.oldChars = [c for c in self.before.text if not c.isspace()]
+		self.newChars = [c for c in self.text if not c.isspace()]
+		return bool(self.new) and len(self.old) == len(self.oldChars) and len(self.new) == len(self.newChars)
+
+	def pool(self, char: str) -> Optional[str]:
+		if char.isdigit():
+			return self.DIGITS
+		if char.isalpha():
+			return self.UPPER if char.isupper() else self.UPPER.lower()
+		return None
+
+	def build(self):
+		import random
+		item = self.item
+		font = item.font()
+		self.hideOutline()
+		static = QPainterPath()
+		static.setFillRule(self.full.fillRule())
+		offset = len(self.newChars) - len(self.oldChars)
+		changed = []
+		for i, (glyph, char) in enumerate(zip(self.new, self.newChars)):
+			j = i - offset
+			same = 0 <= j < len(self.oldChars) and self.oldChars[j] == char
+			pool = self.pool(char)
+			if same or pool is None:
+				static.addPath(glyph.path)
+			else:
+				changed.append((glyph, char, pool))
+		root = self.root()
+		self.static = _child(root, static, item.brush(), item.pen())
+		self.columns = []
+		count = len(changed)
+		for index, (glyph, char, pool) in enumerate(changed):
+			final = _child(root, glyph.path, item.brush(), item.pen())
+			final.setVisible(False)
+			ref = QPainterPath()
+			ref.addText(0, 0, font, char)
+			refBox = ref.boundingRect()
+			scale = glyph.rect.height() / refBox.height() if refBox.height() > 0 else 1.0
+			faces = []
+			for ch in random.sample([c for c in pool if c != char], min(self.VARIANTS, len(pool) - 1)):
+				raw = QPainterPath()
+				raw.addText(0, 0, font, ch)
+				box = raw.boundingRect()
+				# the real character's scale, centred on its column and standing on its baseline
+				fit = QTransform()
+				fit.translate(glyph.rect.center().x() - box.center().x() * scale, glyph.rect.bottom() - refBox.bottom() * scale)
+				fit.scale(scale, scale)
+				face = _child(root, fit.map(raw), item.brush(), item.pen())
+				face.setVisible(False)
+				faces.append(face)
+			settle = self.FIRST + (self.LAST - self.FIRST) * (index + 1) / count
+			self.columns.append([settle, final, faces, -1])
+		self.draw(0.0)
+
+	def draw(self, t: float):
+		step = int(t * self.spec.duration * self.RATE)
+		for column in self.columns:
+			settle, final, faces, shown = column
+			target = -2 if t >= settle or not faces else step % len(faces)
+			if target == shown:
+				continue
+			if 0 <= shown < len(faces):
+				faces[shown].setVisible(False)
+			if target == -2:
+				final.setVisible(True)
+			else:
+				faces[target].setVisible(True)
+			column[3] = target
+
+
+#: A `slot` strip never holds more than this many digits: a column spins at most once round.
+SLOT_MAX_DIGITS = 10
+#: The longest a `count` goes between two rebuilds of its text, in seconds (about 30 a second).
+COUNT_INTERVAL = 1 / 30
+_COUNT_NUMBER = re.compile(r'[-−]?\d[\d,]*(?:\.(\d+))?')
+
+
+class _Slot(_Roll):
+	"""A slot machine: like `roll`, but a changed digit spins through the digits in between before it lands."""
+
+	def _pairs(self, old, oldChars, new, newChars):
+		pairs = _Roll._pairs(old, oldChars, new, newChars)
+		# remember the characters of each column that moves, in the order `_Roll.begin` keeps them
+		size = max(len(old), len(new))
+		po, pn = size - len(old), size - len(new)
+		chars = []
+		for i, pair in enumerate(pairs):
+			if not isinstance(pair[0], str):
+				chars.append((oldChars[i - po] if i >= po else None, newChars[i - pn] if i >= pn else None))
+		self.chars = chars
+		return pairs
+
+	def begin(self):
+		self.chars = []
+		self.strips = []
+		super().begin()
+		if not getattr(self, 'columns', None) or len(self.chars) != len(self.columns):
+			return
+		clips = [c for c in self.children if isinstance(c, QGraphicsRectItem)]
+		if len(clips) != len(self.columns):
+			return
+		mapping, kept = self.oldToNew(), []
+		pitch = abs(self.travel)
+		for (delay, outgoing, incoming), (co, cn), clip in zip(self.columns, self.chars, clips):
+			steps = self._steps(co, cn)
+			if steps is None or outgoing is None or incoming is None:
+				kept.append((delay, outgoing, incoming))
+				continue
+			strip = self._strip(co, cn, steps, outgoing, incoming, pitch, mapping)
+			if strip is None:
+				kept.append((delay, outgoing, incoming))
+				continue
+			_drop(outgoing)
+			_drop(incoming)
+			child = _child(clip, strip, self.item.brush(), self.item.pen())
+			self.strips.append((delay, child, steps))
+		self.columns = kept
+
+	def _steps(self, co, cn):
+		"""How many digits the strip moves through between the old and the new one, or `None` for a non-digit."""
+		if not (co and cn and co.isdecimal() and cn.isdecimal()):
+			return None
+		a, b = int(co), int(cn)
+		n = (b - a) % 10 if self.sign > 0 else (a - b) % 10
+		return min(n, SLOT_MAX_DIGITS - 1) or None
+
+	def _strip(self, co, cn, steps, outgoing, incoming, pitch, mapping):
+		item = self.item
+		font = item.font()
+		target = incoming.path().boundingRect()
+		probe = QPainterPath()
+		probe.addText(0, 0, font, cn)
+		ink = probe.boundingRect()
+		if ink.height() <= 0 or target.height() <= 0:
+			return None
+		scale = target.height() / ink.height()
+		strip = QPainterPath()
+		strip.setFillRule(incoming.path().fillRule())
+		a = int(co)
+		for k in range(steps + 1):
+			y = self.sign * k * pitch
+			if k == 0:
+				strip.addPath(QTransform.fromTranslate(0, y).map(mapping.map(outgoing.path())))
+			elif k == steps:
+				strip.addPath(QTransform.fromTranslate(0, y).map(incoming.path()))
+			else:
+				digit = str((a + self.sign * k) % 10)
+				glyph = QPainterPath()
+				glyph.addText(0, 0, font, digit)
+				b = glyph.boundingRect()
+				place = QTransform()
+				place.translate(target.center().x() - b.center().x() * scale, target.bottom() - b.bottom() * scale + y)
+				place.scale(scale, scale)
+				strip.addPath(place.map(glyph))
+		return strip
+
+	def frame(self, t):
+		super().frame(t)
+		span = 1.0 - self.stagger
+		for delay, child, steps in self.strips:
+			local = _clamp((t - delay) / span) if span > 0 else 1.0
+			p = SLOT_EASE.valueForProgress(local)
+			child.setPos(0, -self.sign * steps * abs(self.travel) * p)
+
+
+SLOT_EASE = QEasingCurve(QEasingCurve.Type.OutQuart)
+
+
+class _Count(_Fade):
+	"""A count-up: the number runs from the old value to the new one, in the item's font, drawn as one child path
+	that is rebuilt only when the shown string changes (and at most 30 times a second). Text without a number fades."""
+
+	def begin(self):
+		old, new = number(self.before.text), number(self.text)
+		match = _COUNT_NUMBER.search(self.text)
+		target = self.item.path()
+		self.counting = old is not None and new is not None and match is not None and not target.isEmpty()
+		if not self.counting:
+			return super().begin()
+		self.old, self.new = old, new
+		self.decimals = len(match.group(1) or '')
+		self.grouped = ',' in match.group(0)
+		self.prefix, self.suffix = self.text[:match.start()], self.text[match.end():]
+		self.full = QPainterPath(target)
+		self.target = target.boundingRect()
+		self.font = self.item.font()
+		reference = QPainterPath()
+		reference.addText(0, 0, self.font, self.text)
+		ink = reference.boundingRect()
+		self.scale = self.target.height() / ink.height() if ink.height() > 0 else 1.0
+		self.shown = None
+		self.stamp = 0.0
+		self.curve = QEasingCurve(QEasingCurve.Type.OutCubic)
+		self.child = _child(self.item, QPainterPath(), self.item.brush(), self.item.pen())
+		self.children.append(self.child)
+		self.item.setPath(QPainterPath())
+
+	def shownText(self, value: float) -> str:
+		body = f'{value:,.{self.decimals}f}' if self.grouped else f'{value:.{self.decimals}f}'
+		return self.prefix + body + self.suffix
+
+	def rebuild(self, text: str):
+		path = QPainterPath()
+		path.addText(0, 0, self.font, text)
+		ink = path.boundingRect()
+		place = QTransform()
+		place.translate(self.target.right() - ink.right() * self.scale, self.target.bottom() - ink.bottom() * self.scale)
+		place.scale(self.scale, self.scale)
+		path = place.map(path)
+		path.setFillRule(self.full.fillRule())
+		self.child.setPath(path)
+		self.shown = text
+
+	def frame(self, t):
+		if not self.counting:
+			return super().frame(t)
+		text = self.shownText(self.old + (self.new - self.old) * self.curve.valueForProgress(t))
+		now = time.monotonic()
+		if text != self.shown and (self.shown is None or t >= 1.0 or now - self.stamp >= COUNT_INTERVAL):
+			self.rebuild(text)
+			self.stamp = now
+
+	def end(self):
+		item = self.item
+		super().end()
+		if isValid(item) and getattr(self, 'full', None) is not None:
+			item.setPath(self.full)
+
+
 EFFECTS = {
 	'fade': _Fade,
 	'slide': _Slide,
@@ -416,6 +966,15 @@ EFFECTS = {
 	'pop': _Pop,
 	'flip': _Flip,
 	'roll': _Roll,
+	'glow': _Glow,
+	'shake': _Shake,
+	'delta': _Delta,
+	'blur': _Blur,
+	'wipe': _Wipe,
+	'typewriter': _Typewriter,
+	'scramble': _Scramble,
+	'slot': _Slot,
+	'count': _Count,
 }
 
 
@@ -447,8 +1006,10 @@ class ChangeAnimator:
 		if not isValid(item) or before.path.isEmpty():
 			return
 		style = spec.style
-		if style == 'roll' and getattr(item, '_warpActive', False):
+		if style in ('roll', 'slot') and getattr(item, '_warpActive', False):
 			style = 'slide'
+		if style == 'delta' and deltaText(before.text, text) is None:
+			style = 'tint'
 		effect = EFFECTS[style](item, before, text, spec)
 		effect.begin()
 		self.effect = effect
