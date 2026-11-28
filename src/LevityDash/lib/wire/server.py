@@ -66,10 +66,11 @@ class WireServer:
 		self.on_disconnect: Optional[Callable[[int], None]] = None
 		self._clients: Set[web.WebSocketResponse] = set()
 		self._connectionIds = count(1)
-		# Last update message seen per source, replayed to new clients. NOTE:
-		# updates are incremental (changed keys only); merging them into a true
-		# cumulative snapshot is a mode=remote-step refinement (TODO), this
-		# keeps only the most recent batch for now.
+		# One cumulative 'update' per source, replayed to new clients: the newest
+		# envelope with every key's latest container merged in. Updates are
+		# incremental (changed keys only), and a key such as the daily forecast
+		# is published once per fetch, so keeping only the last batch left a
+		# frontend that connected late without sunrise, sunset and the daily totals.
 		self._latest: Dict[str, dict] = {}
 		# Most recent 'plugin_status', replayed alongside _latest on connect.
 		# Heartbeats are deliberately NOT retained - replaying a stale one
@@ -122,7 +123,9 @@ class WireServer:
 	async def broadcast(self, message: dict) -> None:
 		match message.get('type'):
 			case 'update' if (name := message.get('source', {}).get('name')) is not None:
-				self._latest[name] = message
+				kept = self._latest.get(name)
+				merged = {**(kept['updates'] if kept else {}), **message.get('updates', {})}
+				self._latest[name] = {**message, 'updates': merged}
 			case 'plugin_status':
 				# Replayed to late joiners for the same reason updates are: the
 				# backend only re-sends this on *change*, so a frontend that

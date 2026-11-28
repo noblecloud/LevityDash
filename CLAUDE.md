@@ -108,9 +108,9 @@ LEVITYDASH_CONFIG_DEBUG=1 poetry run python -m LevityDash   # pristine temp conf
 
 `type: realtime.bar` is a `Meter` on a straight `LineTrack` (`Displays/meter/bar.py`): progress, battery (`style: battery`), segmented (`fill: {segments: N}`) and thermometer (`style: thermometer`). A bar paints track, zones, fill, ticks, markers, pointer and text in one canvas item; it shares `Meter` (value, range, `Scale`) with `Gauge` but not the arc items. It reports `DisplayType.Gauge`, so an item's value feed drives it unchanged; `Realtime` creates it from `DisplayType.Bar`, because `realtime.bar` alone would fuzzy-match the bar *plot*. Options: `docs/config/dashboard/bar.md`. Presets, a showcase dashboard and the `bar-cards` scenario: `docs/design-references/bars/`. The Studio's gauge mode edits one bar too (`studio.py --gauge docs/design-references/bars/bar-battery.levity`): the controls come from the same introspection, a bar has no dial handles but its own (`_studio_bar_handles.py`): the value (a diamond on the track, sets the preview value), zone edges above the track (a cutoff two zones share moves both), fill ends and markers below it, and the track weight (a dot on its edge, written as a % of the cross extent); drags snap like the dial's and undo covers them. Copy code and Save as write `realtime.bar`.
 
-## The second machine (`lambda`)
+## The second machine (`LevityDashDisplay`, formerly `lambda`)
 
-`lambda` (in `~/.ssh/config`; Intel Mac) runs the same dashboard on a room
+`LevityDashDisplay` (in `~/.ssh/config`; Intel Mac; the old alias `lambda` no longer resolves; `scripts/deploy.sh` pushes dev there, `DEPLOY_HOST` overrides) runs the same dashboard on a room
 display, with the same layout — `~/Code/{LevityDash,unitcorn}` and
 `~/Library/Application Support/LevityDash`.
 

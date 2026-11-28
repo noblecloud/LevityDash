@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # ─── Configuration ───────────────────────────────────────────────────────────
-REMOTE_HOST="lambda"
+# The room display. Override with DEPLOY_HOST if the ssh alias changes again.
+REMOTE_HOST="${DEPLOY_HOST:-LevityDashDisplay}"
 REMOTE_CODE_DIR="~/Code"
 
 LOCAL_LEVITY="/Users/noblecloud/Code/LevityDash"
@@ -10,54 +11,19 @@ LOCAL_UC="/Users/noblecloud/Code/unitcorn"
 REMOTE_LEVITY="${REMOTE_CODE_DIR}/LevityDash"
 REMOTE_UC="${REMOTE_CODE_DIR}/unitcorn"
 
-# ─── Rsync exclude patterns ──────────────────────────────────────────────────
-# These prevent local test/layout/config changes from overwriting the deployed version.
-# The actual user config lives outside the repo (via appdirs at ~/.config/LevityDash/),
-# so syncing the repo won't touch it. We still exclude example-config templates and
-# saves within the repo to be safe.
-EXCLUDES=(
-  --exclude='.git/'
-  --exclude='.venv/'
-  --exclude='__pycache__/'
-  --exclude='*.pyc'
-  --exclude='.DS_Store'
-  --exclude='.idea/'
-  --exclude='.vscode/'
-  --exclude='.pytest_cache/'
-  --exclude='.mypy_cache/'
-  --exclude='.config'
-  --exclude='ai-prompt.md'
-  --exclude='dist/'
-  --exclude='build-to-app/dist/'
-  --exclude='build-to-app/build/'
-  --exclude='build-to-app/releases/'
-  --exclude='*.egg-info/'
-  --exclude='.github/'
-  --exclude='node_modules/'
-  --exclude='docs/_build/'
-  --exclude='docs/source/.build/'
-  --exclude='stash/'
-  --exclude='.stash/'
-  --exclude='.run/'
-  --exclude='.envrc'
-  --exclude='.gitignore'
-  --exclude='.syncignore'
-  --exclude='.editorconfig'
-  --exclude='.vale.ini'
-  --exclude='.vale-styles/'
-  --exclude='.claude/'
-)
-
 # ─── Help ────────────────────────────────────────────────────────────────────
 usage() {
   cat <<EOF
 Usage: deploy.sh [OPTIONS]
 
-Deploy LevityDash and UnitCorn to lambda.
+Deploy LevityDash and UnitCorn to the room display (${DEPLOY_HOST:-LevityDashDisplay}) by pushing
+the current dev branch of each checkout over ssh. The checkouts there are real git repos with
+receive.denyCurrentBranch=updateInstead, so the push updates the working tree and a dirty tree
+refuses it (nothing is overwritten).
 
 Options:
   --skip-uc          Skip syncing UnitCorn (--skip-wu still works)
-  --skip-install     Skip poetry install on lambda
+  --skip-install     Skip poetry install on the display
   --restart          Restart the LevityDash service after deploy
   --config-only      Only sync config/settings (not code)
   --help             Show this help
@@ -100,44 +66,25 @@ check_local_rename() {
   fi
 }
 
-# Same one-time move on lambda, keeping its .venv (poetry install relinks it).
+# Same one-time move on the display, keeping its .venv (poetry install relinks it).
 migrate_remote() {
   ssh "${REMOTE_HOST}" "cd ${REMOTE_CODE_DIR} && if [ ! -d unitcorn ] && [ -d WeatherUnits ]; then mv WeatherUnits unitcorn && echo '  → renamed ${REMOTE_CODE_DIR}/WeatherUnits to unitcorn'; fi"
 }
 
-# ─── Sync LevityDash code (not settings) ────────────────────────────────────
-sync_levity() {
-  echo "── Syncing LevityDash to ${REMOTE_HOST}:${REMOTE_LEVITY} ──"
-  rsync -avz --delete \
-    "${EXCLUDES[@]}" \
-    -e ssh \
-    "${LOCAL_LEVITY}/" \
-    "${REMOTE_HOST}:${REMOTE_LEVITY}/"
+# ─── Push code with git ─────────────────────────────────────────────────────
+# `git push host:path dev` updates the display's checkout (updateInstead). Never rsync over it:
+# that bypasses git, leaves no record of the revision and clobbers local state.
+push_repo() {
+  local name="$1" local_dir="$2" remote_dir="$3"
+  echo "── Pushing ${name} dev to ${REMOTE_HOST}:${remote_dir} ──"
+  if [ -n "$(git -C "${local_dir}" status --porcelain --untracked-files=no)" ]; then
+    echo "  ! ${local_dir} has uncommitted changes; only committed work is deployed"
+  fi
+  git -C "${local_dir}" push "${REMOTE_HOST}:${remote_dir}" dev:dev
 }
 
-# ─── Sync UnitCorn ───────────────────────────────────────────────────────
-sync_uc() {
-  echo "── Syncing UnitCorn to ${REMOTE_HOST}:${REMOTE_UC} ──"
-  rsync -avz --delete \
-    --exclude='.git/' \
-    --exclude='.venv/' \
-    --exclude='__pycache__/' \
-    --exclude='*.pyc' \
-    --exclude='.DS_Store' \
-    --exclude='.idea/' \
-    --exclude='.pytest_cache/' \
-    --exclude='dist/' \
-    --exclude='*.egg-info/' \
-    --exclude='.github/' \
-    --exclude='.gitignore' \
-    --exclude='.syncignore' \
-    --exclude='.editorconfig' \
-    --exclude='.envrc' \
-    --exclude='poetry.lock' \
-    -e ssh \
-    "${LOCAL_UC}/" \
-    "${REMOTE_HOST}:${REMOTE_UC}/"
-}
+sync_levity() { push_repo LevityDash "${LOCAL_LEVITY}" "Code/LevityDash"; }
+sync_uc() { push_repo unitcorn "${LOCAL_UC}" "Code/unitcorn"; }
 
 # ─── Post-sync: install deps + UnitCorn in editable mode ────────────────
 post_sync() {
