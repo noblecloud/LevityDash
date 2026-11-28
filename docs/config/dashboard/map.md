@@ -21,6 +21,7 @@ A map with no `lat` and `lon` is centred on `[Location]`, and a dot marks that p
 | `basemap` | `auto` | `auto` follows the theme's background (dark or light), or choose `dark`, `light`; `none` draws the layer on the dashboard itself. |
 | `scheme` | `darksky` | The colours of the rain and temperature: `darksky`, `apple`, `neon` or `classic` (below). |
 | `borders` | `1` | How strongly coasts, borders and rivers stand out: `0` as the base map draws them, up to `3`. |
+| `picker` | | Buttons, top right, that switch the layer with a click: `true` for all four, or a list such as `[radar, temperature]`. The pick is kept like any other setting. |
 | `labels` | `true` | Place names over the data. They keep clear of the stamp, legend and credit. |
 | `opacity` | `0.92` radar, `0.74` fields | How solid the data layer is, `0` to `1`. |
 | `animate` | `true` | Radar loops through the last two hours. `false` shows the newest picture. Click the map to pause. |
@@ -31,6 +32,8 @@ A map with no `lat` and `lon` is centred on `[Location]`, and a dot marks that p
 | `stamp` | `true` | The layer's name and time, top left. |
 | `range` | | `[low, high]`: the ends of the wind (m/s) or temperature (°C) scale. |
 | `tiles` | | A base map of your own: an XYZ URL with `{z}`, `{x}` and `{y}` in it. |
+
+A whole-screen map board ships as the template `WeatherMap.levity` (radar in the Dark Sky colours, with the picker), for a second window or display.
 
 ## Where it comes from
 

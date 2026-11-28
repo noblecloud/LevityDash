@@ -361,6 +361,21 @@ def test_borders_set_how_far_lines_are_lifted(dashboard, offline):
 		sandbox.delete()
 
 
+def test_the_picker_switches_the_layer(dashboard, offline):
+	sandbox, item = _map(dashboard, layer='radar', picker=True)
+	try:
+		boxes = dict(item._pickerBoxes(item.rect()))
+		assert list(boxes) == ['radar', 'temperature', 'wind', 'clouds']
+		assert item.pickAt(boxes['wind'].center()) and item.layer == 'wind'
+		assert not item.pickAt(item.rect().center()) and item.layer == 'wind'
+		item.picker = ['radar', 'clouds']
+		assert [layer for layer, _ in item._pickerBoxes(item.rect())] == ['radar', 'clouds']
+		item.picker = None
+		assert item._pickerBoxes(item.rect()) == []
+	finally:
+		sandbox.delete()
+
+
 def test_place_names_are_drawn(dashboard, offline):
 	sandbox, item = _map(dashboard, layer='none')
 	try:
@@ -450,7 +465,7 @@ def test_bad_numbers_are_refused_with_a_reason(dashboard, offline, bad):
 		sandbox.delete()
 
 
-@pytest.mark.parametrize('bad', [{'layer': 'snow'}, {'basemap': 'sepia'}, {'scheme': 'rainbow'}, {'tiles': 'ftp://x/{z}/{x}/{y}'}, {'tiles': 'https://x/{z}'}])
+@pytest.mark.parametrize('bad', [{'layer': 'snow'}, {'basemap': 'sepia'}, {'scheme': 'rainbow'}, {'picker': ['snow']}, {'tiles': 'ftp://x/{z}/{x}/{y}'}, {'tiles': 'https://x/{z}'}])
 def test_a_bad_word_in_a_dashboard_makes_an_error_tile_not_a_map(dashboard, offline, bad):
 	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.weathermap.item import WeatherMap
 	sandbox = None

@@ -9,6 +9,7 @@
   basemap: auto               # auto | dark | light | none; auto follows the theme's background
   scheme: darksky             # darksky | apple | neon | classic: the rain and temperature colours
   borders: 1                  # how strongly coasts, borders and rivers stand out, 0 to 3
+  picker: true                # buttons, top right, to switch layer: true for all four, or a list of layers
   labels: true                # place names over the data
   opacity: 0.9                # of the data layer; left out: 0.92 for radar, 0.74 for the fields
   animate: true               # radar: loop the last two hours; false shows the latest picture
@@ -158,6 +159,7 @@ class WeatherMap(Panel, tag='map'):
 		self._marker = True
 		self._legend = True
 		self._stamp = True
+		self._picker: tuple[str, ...] = ()
 		self._range: Optional[tuple[float, float]] = None
 		self._tiles: Optional[str] = None
 		self._paused = False
@@ -383,11 +385,27 @@ class WeatherMap(Panel, tag='map'):
 		self._stepper.start(self._speed*3 if last else self._speed)
 
 	def mousePressEvent(self, mouseEvent):
+		if mouseEvent.button() == Qt.MouseButton.LeftButton and self.pickAt(mouseEvent.pos()):
+			mouseEvent.accept()
+			return
 		if self._layer == 'radar' and self._animate and mouseEvent.button() == Qt.MouseButton.LeftButton:
 			self._paused = not self._paused
 			self._schedule()
 			self.update()
 		super().mousePressEvent(mouseEvent)
+
+	def pickAt(self, point: QPointF) -> bool:
+		"""Switch to the layer whose picker button is under `point`; False when no button is."""
+		for layer, box in self._pickerBoxes(QRectF(self.rect())):
+			if box.contains(point):
+				if layer != self._layer:
+					self.layer = layer
+					self._paused = False
+					self._reload()
+					self._schedule()
+					self.update()
+				return True
+		return False
 
 	# -- settings -----------------------------------------------------------------------------
 
@@ -572,6 +590,19 @@ class WeatherMap(Panel, tag='map'):
 	def stamp(self, value: bool):
 		self._stamp = bool(value)
 
+	@StateProperty(key='picker', default=None, after=refresh)
+	def picker(self) -> Optional[list]:
+		"""Buttons, top right, that switch the layer: a list of layers, `true` for all four, or nothing for none."""
+		return list(self._picker) or None
+
+	@picker.setter
+	def picker(self, value):
+		self._picker = _pickerLayers(value)
+
+	@picker.decode
+	def picker(self, value):
+		return list(_pickerLayers(value)) or None
+
 	@StateProperty(key='range', default=None, after=refresh)
 	def range(self) -> Optional[list]:
 		return None if self._range is None else list(self._range)
@@ -730,6 +761,7 @@ class WeatherMap(Panel, tag='map'):
 			painter.restore()
 		self._paintMarker(painter, vp)
 		self._paintLegend(painter, rect)
+		self._paintPicker(painter, rect)
 		self._paintCredit(painter, rect, base)
 		painter.restore()
 
@@ -970,9 +1002,52 @@ class WeatherMap(Panel, tag='map'):
 				x, y, w, h, size = self._legendGeometry(rect)
 				pad = size*0.4
 				areas.append(QRectF(x - pad, y - pad, w + pad*2, h + size*0.25 + QFontMetricsF(self._font(size)).height() + pad*2))
+		areas.extend(box for _, box in self._pickerBoxes(rect))
 		if (credit := self._creditSpec(rect, base)) is not None:
 			areas.append(textBox(*credit))
 		return areas
+
+	def _pickerFont(self, rect: QRectF) -> QFont:
+		return self._font(max(10.0, min(rect.width(), rect.height())*0.04))
+
+	def _pickerBoxes(self, rect: QRectF) -> list[tuple[str, QRectF]]:
+		"""`(layer, box)` of each picker button, right to left from the top right corner."""
+		if not self._picker:
+			return []
+		metrics = QFontMetricsF(self._pickerFont(rect))
+		unit = min(rect.width(), rect.height())
+		margin, gap = unit*0.04, unit*0.012
+		padX, height = metrics.height()*0.55, metrics.height()*1.45
+		boxes, right = [], rect.right() - margin
+		for layer in reversed(self._picker):
+			width = metrics.horizontalAdvance(_PICKER_NAMES[layer]) + padX*2
+			boxes.append((layer, QRectF(right - width, rect.top() + margin, width, height)))
+			right -= width + gap
+		return list(reversed(boxes))
+
+	def _paintPicker(self, painter: QPainter, rect: QRectF):
+		boxes = self._pickerBoxes(rect)
+		if not boxes:
+			return
+		font = self._pickerFont(rect)
+		metrics = QFontMetricsF(font)
+		painter.setFont(font)
+		text = QColor(theme.active().color('text').QColor)
+		ground = QColor(theme.active().color('background').QColor)
+		for layer, box in boxes:
+			on = layer == self._layer
+			fill = QColor(text if on else ground)
+			fill.setAlpha(235 if on else 170)
+			edge = QColor(text)
+			edge.setAlpha(255 if on else 110)
+			painter.setPen(QPen(edge, max(1.0, box.height()*0.05)))
+			painter.setBrush(fill)
+			painter.drawRoundedRect(box, box.height()/2, box.height()/2)
+			label = _PICKER_NAMES[layer]
+			x = box.center().x() - metrics.horizontalAdvance(label)/2
+			y = box.center().y() + (metrics.ascent() - metrics.descent())/2
+			painter.setPen(ground if on else text)
+			painter.drawText(QPointF(x, y), label)
 
 	def _paintCredit(self, painter: QPainter, rect: QRectF, base: Optional[data.Basemap]):
 		credit = self._creditSpec(rect, base)
@@ -981,6 +1056,26 @@ class WeatherMap(Panel, tag='map'):
 		text, font, point = credit
 		painter.setFont(font)
 		self._text(painter, point, text, QColor(theme.active().color('muted').QColor))
+
+
+_PICKER_NAMES = {'radar': 'Rain', 'temperature': 'Temp', 'wind': 'Wind', 'clouds': 'Cloud'}
+
+
+def _pickerLayers(value) -> tuple[str, ...]:
+	"""The layers a `picker:` value offers, in order."""
+	if value is None or value is False:
+		return ()
+	if value is True:
+		return tuple(_PICKER_NAMES)
+	if isinstance(value, str):
+		value = [value]
+	layers = []
+	for layer in value:
+		layer = str(layer).lower()
+		_oneOf('picker', layer, tuple(_PICKER_NAMES))
+		if layer not in layers:
+			layers.append(layer)
+	return tuple(layers)
 
 
 def _bandFor(lo: float, hi: float) -> tuple[float, float]:
