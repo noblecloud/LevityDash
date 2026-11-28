@@ -22,12 +22,12 @@ The maintainer's rules for the fix:
 
 - **Not per measurement type.** inHg and hPa have opposite conventions, so "all pressures" is wrong.
 - **Not in `config.ini`.** `[UnitProperties]` is user-facing configuration, not where a unit's own conventions belong.
-- **Use WeatherUnits formatting.** Do not post-process strings with regexes. That was tried and rejected.
+- **Use UnitCorn formatting.** Do not post-process strings with regexes. That was tried and rejected.
 - **No bolt-ons.** No format table inside the gauge.
 
 ## Phase 1 — units carry a compact format; the tick spacing sets its floor
 
-### 1a. WeatherUnits: a compact format per unit (sibling repo `../WeatherUnits`)
+### 1a. UnitCorn: a compact format per unit (sibling repo `../unitcorn`)
 
 Where a unit's formatting comes from today, lowest to highest (`ChainMap(extras, specParams, params)` in `SmartFloat.__format__`, `base/_SmartFloat.py` ~828):
 
@@ -54,11 +54,11 @@ Also in that repo:
 - **The keyword-precision fix.** `v.__format__('', precision=0)` is ignored when the unit's config says `trailing_zeros=precision`.
   - The string form `format(v, 'precision=0')` works, which is why the bug hides.
   - The fix (`params.explicitPrecision` in `base/_SmartFloat.py`) is uncommitted in the maintainer's checkout. Re-apply it from [the diff below](#the-keyword-precision-fix) and add the regression test.
-  - Hand back a commit; the maintainer pushes WeatherUnits.
+  - Hand back a commit; the maintainer pushes UnitCorn.
 
-⚠️ **To reproduce it, load the US config.** WeatherUnits picks `us.ini` or `si.ini` from the **locale**, and a container without `en_US` silently gets `si.ini`. That config has no `inHg` line, so precision is 1 and the bug cannot show.
+⚠️ **To reproduce it, load the US config.** UnitCorn picks `us.ini` or `si.ini` from the **locale**, and a container without `en_US` silently gets `si.ini`. That config has no `inHg` line, so precision is 1 and the bug cannot show.
 - The tell: plain `format(InchOfMercury(29.92), '')` gives `'29.9 inHg'`. With `us.ini` loaded it gives `'29.92 inHg'`.
-- Set `WU_CONFIG_PATH=<abs path>/src/WeatherUnits/config/us.ini`. That is the variable; `WU_CONFIG` does nothing.
+- Set `WU_CONFIG_PATH=<abs path>/src/unitcorn/config/us.ini`. That is the variable; `WU_CONFIG` does nothing.
 
 Verified 2026-10-04 with `us.ini` loaded:
 
@@ -111,7 +111,7 @@ Real instrument faces label whole units and leave the half-ticks bare. That avoi
 ### Verify
 
 - **Tests:**
-  - WeatherUnits:
+  - UnitCorn:
     - `format(InchOfMercury(28.0), <compact>)` gives `28` and `29.5` stays `29.5`, **with `us.ini` loaded** (see the ⚠️ above);
     - `Hectopascal(1013.2)` compact gives `1013`;
     - the keyword `precision=0` gives `28`.

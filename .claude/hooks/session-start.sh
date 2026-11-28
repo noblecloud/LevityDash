@@ -1,6 +1,6 @@
 #!/bin/bash
 # Cloud sessions only: make the container match the dev Mac.
-# Python 3.14, en_US.UTF-8 locale, unitcorn (WeatherUnits repo) beside the repo, Poetry env in .venv.
+# Python 3.14, en_US.UTF-8 locale, unitcorn beside the repo, Poetry env in .venv.
 set -euo pipefail
 
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
@@ -32,8 +32,8 @@ UV="$UVENV/bin/uv"
 "$UV" python install "$PYVER"
 PY="$("$UV" python find "$PYVER")"
 
-# unitcorn is a path dependency at ../WeatherUnits (the repo keeps its old name) (develop mode, dev branch).
-WU="$REPO/../WeatherUnits"
+# unitcorn is a path dependency at ../unitcorn (develop mode, dev branch).
+WU="$REPO/../unitcorn"
 if [ ! -d "$WU/.git" ]; then
 	git clone -q https://github.com/noblecloud/unitcorn.git "$WU"
 fi

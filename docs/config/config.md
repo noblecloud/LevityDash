@@ -78,7 +78,7 @@ When ```True```, Levity will run in fullscreen mode.
 
 ### <div class=mono>width/height</div> 
 
-The starting width and height of the window in pixels `px`, percentage `%`, centimeters `cm`, millimeters `mm`, inches `in` or pretty much any length unit supported by unitcorn. For values without a unit, integers are assumed to be
+The starting width and height of the window in pixels `px`, percentage `%`, centimeters `cm`, millimeters `mm`, inches `in` or pretty much any length unit supported by UnitCorn. For values without a unit, integers are assumed to be
 pixels and floats, percentages.
 If provided a real-world measurement like centimeters, the value will be estimated based on the displays reported DPI.
 
@@ -251,10 +251,10 @@ The band stretches to your range, and the cold and hot ends of the scale slide w
 
 A colour that you write as stops yourself (`gradient: {50°F: ..., 80°F: ...}`) is not part of the scale and does not move. See [Themes](config/dashboard/themes.md#comfort-range).
 
-## unitcorn <!-- {docsify-ignore} -->
+## UnitCorn <!-- {docsify-ignore} -->
 
-The sections below are for unitcorn (formerly WeatherUnits), the library that converts and localizes measurements for display. More information on how it's configured can be found in
-the [unitcorn repo](https://github.com/noblecloud/unitcorn).
+The sections below are for UnitCorn (formerly WeatherUnits), the library that converts and localizes measurements for display. More information on how it's configured can be found in
+the [UnitCorn repo](https://github.com/noblecloud/unitcorn).
 
 ```ini
 [Units]

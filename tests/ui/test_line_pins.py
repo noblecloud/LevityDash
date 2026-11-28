@@ -46,3 +46,11 @@ def test_pins_take_an_at_height_and_strip_is_a_plot_kind():
 		assert plotClassFor({'type': name}) is StripPlot
 	assert StripPlot._rowAt == 0.5 and StripPlot._drawsLine is False
 	assert LinePlot._rowAt is None and LinePlot._drawsLine is True
+
+
+def test_pin_map_takes_comparisons_and_drops_unnamed_values():
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.Graph import PIN_DEFAULTS, pinText
+
+	config = {**PIN_DEFAULTS, 'map': {'true': 'storm'}}
+	assert pinText(True, config)[0] == 'storm'
+	assert pinText(False, config)[0] == ''

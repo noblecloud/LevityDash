@@ -53,7 +53,7 @@ One word per idea, in docs, UI strings and new code. The class `Panel`, `Central
 ## Environment
 
 - Poetry; Python `>=3.13,<3.15` (developed and run on 3.14).
-- The `dev` dependency group path-depends on a sibling checkout `../WeatherUnits` (develop mode). That repo is the unitcorn library, imported as `import unitcorn as wu`; it was renamed from WeatherUnits in 0.9.0 and the checkout directory kept the old name. Without it, `poetry install --without dev`.
+- The `dev` dependency group path-depends on a sibling checkout `../unitcorn` (develop mode). That repo is the unitcorn library, imported as `import unitcorn as wu`; it was renamed from WeatherUnits in 0.9.0. Without it, `poetry install --without dev`.
 - After dependency churn, the editable install can come unlinked — fix with `poetry run pip install -e . --no-deps`.
 - Keep `pyside6` at its pinned floor; loose upgrades have pulled broken Qt builds before.
 
@@ -111,7 +111,7 @@ LEVITYDASH_CONFIG_DEBUG=1 poetry run python -m LevityDash   # pristine temp conf
 ## The second machine (`lambda`)
 
 `lambda` (in `~/.ssh/config`; Intel Mac) runs the same dashboard on a room
-display, with the same layout — `~/Code/{LevityDash,WeatherUnits}` and
+display, with the same layout — `~/Code/{LevityDash,unitcorn}` and
 `~/Library/Application Support/LevityDash`.
 
 Both **were** kept in sync by PyCharm rsync, which left them with no `.git` and no
@@ -121,7 +121,7 @@ trip). Each repo has its own `lambda` remote:
 
 ```bash
 git push lambda dev      # from LevityDash  -> lambda:Code/LevityDash
-git push lambda dev      # from WeatherUnits -> lambda:Code/WeatherUnits
+git push lambda dev      # from unitcorn     -> lambda:Code/unitcorn
 ```
 
 `receive.denyCurrentBranch=updateInstead` is set in both, so a push updates the
@@ -129,8 +129,8 @@ working tree directly — but **only if that tree is clean**; a push onto a dirt
 tree is refused. Turn PyCharm's auto-upload off for both projects, or it will
 fight the checkouts.
 
-Note LevityDash's `dev` group path-depends on `../WeatherUnits` in develop mode
-there as well, so pushing WeatherUnits changes what LevityDash resolves on that
+Note LevityDash's `dev` group path-depends on `../unitcorn` in develop mode
+there as well, so pushing unitcorn changes what LevityDash resolves on that
 box — push both when they move together.
 
 `poetry` isn't on `PATH` for non-interactive SSH there; use `.venv/bin/python -m

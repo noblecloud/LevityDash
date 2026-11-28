@@ -94,7 +94,7 @@ precisely why indoor and outdoor temperature cannot be compared or averaged
 today — they are different keys for the same measurement.
 
 Units stay **out** of names (OTel-style metadata). Prometheus bakes units in
-only because PromQL has no unit type; WeatherUnits means we don't need that.
+only because PromQL has no unit type; UnitCorn means we don't need that.
 
 ### The schema is already right
 
@@ -468,7 +468,7 @@ honestly rather than show nothing. OTel treats this as first-class
 | **Series alignment** | ensembles have different timestamps, resolutions and horizons — needs resampling onto a common grid before averaging. What happens past the shortest horizon needs a stated policy |
 | **Stale members** | nobody does this well: openHAB folds a dead sensor's last value in forever. **Decided:** an aggregate ignores a reading older than one hour, and one aggregate can set another bound. LevityDash already tracks value age (`plugins/freshness.py`), so the age is known |
 | **Missing members** | HA silently drops them, so a 2-sensor average quietly becomes 1 and still looks authoritative. **Decided:** an aggregate publishes the count of readings it used beside its value ("1 of 2") |
-| **Units** | HA's `min_max` refuses mismatched units; openHAB's `SUM` drops the UoM (open bug). WeatherUnits lets us just convert first — a genuine differentiator |
+| **Units** | HA's `min_max` refuses mismatched units; openHAB's `SUM` drops the UoM (open bug). UnitCorn lets us just convert first — a genuine differentiator |
 | **Conditional panels** | **two** features: the condition (easy) and **layout reflow** (hard). Grafana needed a whole new grid engine. `.levity` uses absolute geometry, so a hidden panel leaves a hole — but **stacks already reflow**, so start there |
 | **Events / lists / non-numeric** | calendars, "top 10 processes", strings, geo — all break a `float + unit` container. The top three things that will break the current model |
 | **Save-order safety** | `sort_keys=False` + a round-trip test, before any order becomes load-bearing. Task #20 (save/load corrupts structure) is open and should land first |

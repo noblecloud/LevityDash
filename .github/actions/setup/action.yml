@@ -1,5 +1,5 @@
 name: Set up LevityDash
-description: Python 3.14, Qt runtime libraries, en_US locale, unitcorn (the WeatherUnits repo) beside the repo, Poetry install into LevityDash/.venv. Expects the repo checked out at ./LevityDash.
+description: Python 3.14, Qt runtime libraries, en_US locale, unitcorn beside the repo, Poetry install into LevityDash/.venv. Expects the repo checked out at ./LevityDash.
 runs:
   using: composite
   steps:
@@ -22,9 +22,9 @@ runs:
           ~/.cache/pip
         key: poetry-${{ runner.os }}-py3.14-${{ hashFiles('LevityDash/poetry.lock') }}
         restore-keys: poetry-${{ runner.os }}-py3.14-
-    - name: unitcorn (path dependency, WeatherUnits repo)
+    - name: unitcorn (path dependency)
       shell: bash
-      run: git clone --depth 1 --branch dev https://github.com/noblecloud/unitcorn.git WeatherUnits
+      run: git clone --depth 1 --branch dev https://github.com/noblecloud/unitcorn.git unitcorn
     - name: Install dependencies
       shell: bash
       working-directory: LevityDash

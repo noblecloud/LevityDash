@@ -1977,7 +1977,7 @@ class LinePlot(Plot):
 		`size` is pixels (or `5mm`); `offset` is in sizes, negative above the line; `spacing` is the least
 		gap between marks in sizes. An icon value draws as its glyph. Other values need `steps`
 		(`[[0, wi:day-sunny], [0.05, wi:showers], [0.3, wi:rain]]`: a number takes the last row it reaches)
-		or `map` (`{0: 'wi:day-sunny'}`: exact values); with neither, the value prints as text.
+		or `map` (`{0: 'wi:day-sunny'}`: exact values; a value it leaves out gets no mark); with neither, the value prints as text.
 		`at` (0 bottom to 1 top of the figure) sets every mark at that height instead of on the line,
 		which makes a row of glyphs: a condition timeline. A `strip` plot draws only that row.
 		`only: peaks | troughs | extremes` puts pins only where the line turns (a turn must stand out by
@@ -2335,8 +2335,12 @@ def pinText(value: Any, config: Mapping) -> tuple[str, Optional[QFont]]:
 
 	if isinstance(value, Icon):
 		return value.unicode, QFont(value.font)
-	if str(value) in config['map']:
-		return resolve(config['map'][str(value)])
+	# A comparison gives True or False; `true` is how YAML 1.2 keys it.
+	names = (str(value), str(value).lower()) if isinstance(value, (bool, np.bool_)) else (str(value),)
+	if (name := next((n for n in names if n in config['map']), None)) is not None:
+		return resolve(config['map'][name])
+	if config['map'] and not config['steps']:
+		return '', None  # a value the map does not name has no mark
 	if config['steps']:
 		try:
 			number = float(value)
