@@ -59,7 +59,7 @@ MODIFIERS = frozenset({'alpha', 'lighten', 'darken', 'chroma', 'hue-shift', 'mix
 #: leaves one out takes it from the theme it extends.
 STANDARD_TOKENS: dict[str, tuple[str, ...]] = {
 	'colors': (
-		'background', 'surface', 'text', 'muted', 'faint', 'rule', 'accent',
+		'background', 'surface', 'sunk', 'text', 'muted', 'faint', 'rule', 'accent', 'accent-text', 'on-accent',
 		'good', 'warn', 'bad', 'info',
 		'series-1', 'series-2', 'series-3', 'series-4', 'series-5', 'series-6',
 		'needle-glow', 'moon', 'moon-shade', 'moon-glow',
@@ -68,7 +68,8 @@ STANDARD_TOKENS: dict[str, tuple[str, ...]] = {
 	'scales': ('load', 'temperature', 'sky', 'sky-top', 'sky-horizon'),
 	# Names use underscores, not hyphens: a size is spliced into a dashboard as a variable, and a bare `$name` there stops at a hyphen.
 	'sizes':  ('unit', 'type_caption', 'type_label', 'type_value', 'type_head', 'type_hero',
-	           'space_1', 'space_2', 'space_3', 'space_4', 'space_5', 'space_6'),
+	           'space_1', 'space_2', 'space_3', 'space_4', 'space_5', 'space_6',
+	           'radius_tile', 'radius_card', 'motion'),
 }
 
 DEFAULT_NAME = 'default'

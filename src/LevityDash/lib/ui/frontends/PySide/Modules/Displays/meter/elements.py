@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Iterator, Optional, Seque
 
 from numpy import ceil, cos, pi, radians, sin, sqrt
 from PySide6.QtCore import (
-	QEasingCurve, QPoint, QPointF, QPropertyAnimation, QRectF, QSizeF, QTimer, QVariantAnimation, Signal,
+	QPoint, QPointF, QPropertyAnimation, QRectF, QSizeF, QTimer, QVariantAnimation, Signal,
 )
 from PySide6.QtGui import (
 	QBrush, QColor, QFont, QFontMetricsF, QGradient, QPainter, QPainterPath, QPainterPathStroker, QPen, QPolygonF,
@@ -35,7 +35,7 @@ from shiboken6 import isValid
 
 from LevityDash.lib.stateful import Binding, SourceType, StateProperty, Stateful
 from LevityDash.lib.stateful_mixins import ColorGradientMixin
-from LevityDash.lib.ui import Color, Gradient, UILogger
+from LevityDash.lib.ui import Color, Gradient, UILogger, motion
 from LevityDash.lib.ui.colors import theme
 from LevityDash.lib.ui.bound_number import BoundNumber, decodeNumber, isBound
 from LevityDash.lib.ui.colors.bound import BoundColor, decodeColor
@@ -3072,7 +3072,7 @@ class Needle(GlowMixin, StatefulGaugePathItem):
 		self._stopAnimation()
 		animation = QVariantAnimation()
 		animation.setDuration(int(ms))
-		animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+		animation.setEasingCurve(motion.curve())
 		animation.setStartValue(float(shown))
 		animation.setEndValue(float(destination))
 		animation.valueChanged.connect(self._onAnimated)

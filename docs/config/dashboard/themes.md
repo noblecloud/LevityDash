@@ -59,13 +59,15 @@ items:
 
 <!-- panels:end -->
 
-LevityDash includes three themes:
+LevityDash includes five themes:
 
 | Name | Look |
 |------|------|
 | `default` | White on black. The original look. |
 | `dusk` | Light text on a cool, dark blue. One warm accent. |
 | `paper` | Dark ink on warm paper. A light theme. |
+| `neon` | Bright cyan on indigo-tinted darks. Rounded cards and a springy needle. |
+| `neon-day` | The light version of `neon`. |
 
 To change the theme, edit the file and press `Ctrl+R`. A theme change needs a reload.
 
@@ -94,15 +96,16 @@ Every theme defines these tokens.
 
 | Group | Tokens |
 |-------|--------|
-| Colors | `background` `surface` `text` `muted` `faint` `rule` `accent` `good` `warn` `bad` `info` `series-1` to `series-6` |
+| Colors | `background` `surface` `sunk` `text` `muted` `faint` `rule` `accent` `accent-text` `on-accent` `good` `warn` `bad` `info` `series-1` to `series-6` |
 | Fonts | `display` `mono` `body` |
 | Gradients | `load` `temperature` |
-| Sizes | `unit` `type_caption` `type_label` `type_value` `type_head` `type_hero` `space_1` to `space_6` |
+| Sizes | `unit` `type_caption` `type_label` `type_value` `type_head` `type_hero` `space_1` to `space_6` `radius_tile` `radius_card` `motion` |
 
 - `background` is behind the whole dashboard. `surface` is the face of a card.
 - `text` is for values. `muted` is for titles and captions. `faint` is for units and tick marks.
 - `rule` is for dividers, gauge tracks, and axes.
-- `accent` is the one color that draws the eye.
+- `accent` is the one color that draws the eye. `accent-text` is the accent used as ink on `background`: the same color in a dark theme, a darker one in a light theme, where the bright fill is too pale to read. `on-accent` is ink on a solid accent fill.
+- `sunk` is a recess: the well a gauge sits in, or the plate behind a group of cards.
 - `good`, `warn`, and `bad` are for data that has a state.
 - `series-1` to `series-6` are for graph lines, in the order a dashboard uses them.
 - `display` is for titles and labels. `mono` is for numbers that line up. `body` is for everything else.
@@ -137,6 +140,9 @@ items:
 | `type_head` | `160%` | The words that name a panel. |
 | `type_hero` | `400%` | The one number a panel is about. |
 | `space_1` to `space_6` | `1mm` `2mm` `4mm` `6mm` `8mm` `12mm` | Inside a cell, between cells, between panels, the outer margin. |
+| `radius_tile` | `0` | Corner radius of a panel that holds cards. |
+| `radius_card` | `0` | Corner radius of a card inside a tile. Smaller than the tile, so the corners nest. |
+| `motion` | `smooth` | How a needle or a carousel settles: `smooth` or `spring`. |
 
 The type steps are percentages of the label size, about 1.25 apart. They set the ratio between roles where a size is written as a percentage. A text item that fits its box is sized by its [size group](/config/dashboard/size-groups.md), not by these.
 
@@ -149,6 +155,16 @@ theme:
     space_3: 5mm
     type_head: 180%
 ```
+
+### Corners and motion
+
+Two radii are enough: one for a tile and a smaller one for the cards in it. Write them as a variable on a border, `border: {enabled: true, edges: all, radius: $radius_card, fill: $surface, weight: 0}`. The shipped themes other than `neon` leave both at `0`, so square corners stay square. `docs/design-references/themed-cards.levity` draws a tile of cards this way.
+
+`motion: spring` makes a hand and a [band](/config/dashboard/band.md) leave quickly, pass the new value by a few percent and settle on it, the curve `cubic-bezier(0.34, 1.56, 0.64, 1)`. `smooth` eases in and out and does not overshoot. The hand still ends exactly on the value. A hand with an `animate` time and a band with a `transition` time follow the theme.
+
+### Tinted neutrals
+
+Pure greys look dead beside a coloured sky. `neon` takes every neutral from one hue (275, indigo) at low Oklch chroma, so the ground, cards, rules and text lean the same way. A theme of your own can do the same: pick one hue, keep chroma between 0.01 and 0.05, and step the lightness.
 
 ## Change a few tokens for one dashboard
 

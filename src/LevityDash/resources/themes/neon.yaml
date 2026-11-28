@@ -1,0 +1,42 @@
+# Neon on tinted neutrals. Every grey leans the same way: one hue (275, indigo) at low chroma, so the ground, the
+# cards, the rules and the text read as one family and sit under the navy and violet of the sky ground. One accent
+# (cyan) carries the eye; magenta is the sixth series only, so it stays rare. Written in Oklch, stored as hex.
+name: neon
+mode: dark
+extends: default
+
+colors:
+  background: '#0a0c1a'   # oklch(0.16 0.03 275)
+  surface: '#16192b'      # 0.22
+  sunk: '#040512'         # 0.125, a recess below the ground
+  rule: '#32364d'
+  text: '#eff1fa'
+  muted: '#bec3d8'
+  faint: '#8b91ab'
+  accent: '#00f1fd'       # oklch(0.86 0.17 200)
+  accent-text: $accent    # bright enough to read on the dark ground as it is
+  on-accent: $background
+  good: '#4eed80'
+  warn: '#fbd530'
+  bad: '#ff5a63'
+  info: '#61c0ff'
+  series-1: $accent
+  series-2: '#cfa2ff'
+  series-3: '#4eed80'
+  series-4: '#fbd530'
+  series-5: '#ff8205'
+  series-6: '#ff3dca'     # magenta, used last and sparingly
+  needle-glow: {color: $accent, alpha: 0.6}
+  moon: $text
+  moon-shade: '#1b2040'
+  moon-glow: {color: $accent, alpha: 0.7}
+
+scales:
+  load: {0: $good, 60: $warn, 85: $bad}
+  temperature: {0°F: '#61c0ff', 45°F: '#00f1fd', 70°F: '#eff1fa', 85°F: '#ff8205', 100°F: '#ff3dca'}
+  sky: {0: '#070918', 0.55: '#0d1030', 1: '#1d1240'}
+
+sizes:
+  radius_tile: 28px       # two radii, tile over card, about 4:3
+  radius_card: 21px
+  motion: spring
