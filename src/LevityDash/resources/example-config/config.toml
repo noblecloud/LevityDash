@@ -23,6 +23,17 @@ liveUpdateTimedeltas = true
 # low = "55F"
 # high = "72F"
 
+# Saved history: everything the plugins pull is kept, so a restart does not empty the graphs.
+# The default is InfluxDB 3 Core (brew install influxdb3-core), which LevityDash-run starts and keeps up.
+# If it cannot be reached the app keeps history in a SQLite file instead. All keys are optional.
+# See "Saved history" in the plugin docs.
+[History]
+# backend = "influxdb"   # influxdb, questdb or sqlite
+# retention = 30         # days to keep rows
+# restore = 2            # days read back into the plugins at start
+# raw = true             # keep the body of every fetched response
+# enabled = true         # false keeps nothing
+
 [QtOptions]
 openGL = true
 antialiasing = true
