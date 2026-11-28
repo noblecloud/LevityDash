@@ -84,6 +84,30 @@ def test_snapshot_replayed_to_late_client():
 	assert received[0]['source']['name'] == 'TestPlugin'
 
 
+def test_late_client_gets_every_key_not_only_the_last_batch():
+	"""A key published once (the daily forecast) must survive later batches that carry other keys."""
+	async def scenario():
+		server = WireServer()
+		await server.start()
+		first = _make_update_message()
+		second = _make_update_message()
+		second['updates'] = {'environment.light.sunrise': second['updates'].pop('environment.temperature.temperature')}
+		await server.broadcast(first)
+		await server.broadcast(second)
+		received: list[dict] = []
+		client = WireClient(server.url, received.append)
+		await client.connect()
+		ok = await _wait_for(lambda: bool(received))
+		await client.close()
+		await server.stop()
+		return ok, received
+
+	ok, received = asyncio.run(scenario())
+	assert ok
+	keys = set().union(*(m['updates'] for m in received if m.get('type') == 'update'))
+	assert keys == {'environment.temperature.temperature', 'environment.light.sunrise'}
+
+
 def test_a_value_with_no_json_form_does_not_drop_the_client():
 	"""A bare sentinel in a stored update used to raise in the replay, dropping each frontend as it connected."""
 	async def scenario():
