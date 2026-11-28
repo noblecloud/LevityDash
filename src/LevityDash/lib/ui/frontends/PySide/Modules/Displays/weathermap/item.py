@@ -491,7 +491,10 @@ class WeatherMap(Panel, tag='map'):
 
 	@borders.decode
 	def borders(self, value) -> float:
-		return max(0.0, min(3.0, float(value)))
+		value = float(value)
+		if not 0.0 <= value <= 3.0:
+			raise ValueError(f'borders is 0 to 3, not {value}')
+		return value
 
 	@StateProperty(key='labels', default=True, allowNone=False, after=_reload)
 	def labels(self) -> bool:
