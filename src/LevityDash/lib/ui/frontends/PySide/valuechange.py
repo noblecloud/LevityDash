@@ -579,6 +579,211 @@ class _Blur(_Effect):
 		for copy, k in zip(self.newCopies, (1, 2)):
 			copy.setOpacity(0.3 * arriving)
 			copy.setPos(0, k * local)
+class _Delegating(_Effect):
+	"""An effect that may find it cannot draw this change and hands it to another style (`fallback`) instead."""
+	fallback = _Fade
+
+	def __init__(self, *args):
+		super().__init__(*args)
+		self.inner: Optional[_Effect] = None
+		self.full: Optional[QPainterPath] = None
+
+	def usable(self) -> bool:
+		return True
+
+	def build(self):
+		pass
+
+	def begin(self):
+		if self.usable():
+			self.build()
+		else:
+			self.inner = self.fallback(self.item, self.before, self.text, self.spec)
+			self.inner.begin()
+
+	def frame(self, t: float):
+		if self.inner is not None:
+			self.inner.frame(t)
+		else:
+			self.draw(t)
+
+	def draw(self, t: float):
+		pass
+
+	def end(self):
+		item = self.item
+		if self.inner is not None:
+			self.inner.end()
+			self.inner = None
+		super().end()
+		if isValid(item) and self.full is not None:
+			item.setPath(self.full)
+
+	def root(self) -> QGraphicsRectItem:
+		"""One invisible parent for everything this effect adds, so the item has one child while it runs."""
+		root = QGraphicsRectItem(QRectF(), self.item)
+		root.setPen(QPen(Qt.PenStyle.NoPen))
+		root.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+		root.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+		self.children.append(root)
+		return root
+
+	def hideOutline(self):
+		self.full = QPainterPath(self.item.path())
+		self.item.setPath(QPainterPath())
+
+
+def _clipRect(parent) -> QGraphicsRectItem:
+	clip = QGraphicsRectItem(QRectF(), parent)
+	clip.setPen(QPen(Qt.PenStyle.NoPen))
+	clip.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+	clip.setFlag(QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape, True)
+	clip.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+	return clip
+
+
+class _Wipe(_Delegating):
+	"""An edge sweeps left to right: the new text shows behind it, the old text is wiped away by it."""
+
+	def build(self):
+		item, before = self.item, self.before
+		mapping = self.oldToNew()
+		self.hideOutline()
+		band = self.full.boundingRect().united(mapping.mapRect(before.path.boundingRect()))
+		pad = band.height() * 0.15
+		self.band = band.adjusted(-pad, -pad, pad, pad)
+		root = self.root()
+		self.fresh, self.stale = _clipRect(root), _clipRect(root)
+		_child(self.fresh, self.full, item.brush(), item.pen())
+		old = _child(self.stale, before.path, before.brush, before.pen)
+		old.setTransform(mapping)
+		self.draw(0.0)
+
+	def draw(self, t: float):
+		band = self.band
+		x = band.left() + band.width() * _smooth(t)
+		self.fresh.setRect(QRectF(band.left(), band.top(), x - band.left(), band.height()))
+		self.stale.setRect(QRectF(x, band.top(), band.right() - x, band.height()))
+
+
+class _Typewriter(_Delegating):
+	"""The new characters appear one at a time, left to right, each with a short fade."""
+	fallback = _Wipe
+	#: The longest a character may wait for the one before it, in seconds; a long string is spread over the duration.
+	STEP = 0.09
+	#: How long the old text takes to fade out, and how long each character takes to fade in, as shares of the duration.
+	OUT, IN = 0.15, 0.12
+
+	def usable(self) -> bool:
+		self.parts = glyphs(self.item.path())
+		return bool(self.parts) and len(self.parts) == len([c for c in self.text if not c.isspace()])
+
+	def build(self):
+		item = self.item
+		self.hideOutline()
+		root = self.root()
+		self.old = _child(root, self.before.path, self.before.brush, self.before.pen)
+		self.old.setTransform(self.oldToNew())
+		self.letters = []
+		for part in self.parts:
+			letter = _child(root, part.path, item.brush(), item.pen())
+			letter.setOpacity(0.0)
+			self.letters.append(letter)
+		count = len(self.letters)
+		room = 1.0 - self.IN - self.OUT * 0.5
+		self.step = min(room / count, self.STEP / max(0.05, self.spec.duration))
+		self.start = self.OUT * 0.5
+		self.draw(0.0)
+
+	def draw(self, t: float):
+		self.old.setOpacity(max(0.0, 1.0 - t / self.OUT))
+		for i, letter in enumerate(self.letters):
+			k = _clamp((t - self.start - i * self.step) / self.IN)
+			if letter.opacity() != k:
+				letter.setOpacity(k)
+
+
+class _Scramble(_Delegating):
+	"""A decode: each changed digit or letter shows random ones that settle, left to right, into the new character."""
+	fallback = _Fade
+	#: Random characters shown per column, and how often the shown one changes.
+	VARIANTS, RATE = 6, 20
+	#: When the first and the last changed column settle, as shares of the duration.
+	FIRST, LAST = 0.3, 0.9
+	DIGITS, UPPER = '0123456789', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+
+	def usable(self) -> bool:
+		self.old = glyphs(self.before.path)
+		self.new = glyphs(self.item.path())
+		self.oldChars = [c for c in self.before.text if not c.isspace()]
+		self.newChars = [c for c in self.text if not c.isspace()]
+		return bool(self.new) and len(self.old) == len(self.oldChars) and len(self.new) == len(self.newChars)
+
+	def pool(self, char: str) -> Optional[str]:
+		if char.isdigit():
+			return self.DIGITS
+		if char.isalpha():
+			return self.UPPER if char.isupper() else self.UPPER.lower()
+		return None
+
+	def build(self):
+		import random
+		item = self.item
+		font = item.font()
+		self.hideOutline()
+		static = QPainterPath()
+		static.setFillRule(self.full.fillRule())
+		offset = len(self.newChars) - len(self.oldChars)
+		changed = []
+		for i, (glyph, char) in enumerate(zip(self.new, self.newChars)):
+			j = i - offset
+			same = 0 <= j < len(self.oldChars) and self.oldChars[j] == char
+			pool = self.pool(char)
+			if same or pool is None:
+				static.addPath(glyph.path)
+			else:
+				changed.append((glyph, char, pool))
+		root = self.root()
+		self.static = _child(root, static, item.brush(), item.pen())
+		self.columns = []
+		count = len(changed)
+		for index, (glyph, char, pool) in enumerate(changed):
+			final = _child(root, glyph.path, item.brush(), item.pen())
+			final.setVisible(False)
+			ref = QPainterPath()
+			ref.addText(0, 0, font, char)
+			refBox = ref.boundingRect()
+			scale = glyph.rect.height() / refBox.height() if refBox.height() > 0 else 1.0
+			faces = []
+			for ch in random.sample([c for c in pool if c != char], min(self.VARIANTS, len(pool) - 1)):
+				raw = QPainterPath()
+				raw.addText(0, 0, font, ch)
+				box = raw.boundingRect()
+				# the real character's scale, centred on its column and standing on its baseline
+				fit = QTransform()
+				fit.translate(glyph.rect.center().x() - box.center().x() * scale, glyph.rect.bottom() - refBox.bottom() * scale)
+				fit.scale(scale, scale)
+				face = _child(root, fit.map(raw), item.brush(), item.pen())
+				face.setVisible(False)
+				faces.append(face)
+			settle = self.FIRST + (self.LAST - self.FIRST) * (index + 1) / count
+			self.columns.append([settle, final, faces, -1])
+		self.draw(0.0)
+
+	def draw(self, t: float):
+		step = int(t * self.spec.duration * self.RATE)
+		for column in self.columns:
+			settle, final, faces, shown = column
+			target = -2 if t >= settle or not faces else step % len(faces)
+			if target == shown:
+				continue
+			if 0 <= shown < len(faces):
+				faces[shown].setVisible(False)
+			if target == -2:
+				final.setVisible(True)
+			else:
+				faces[target].setVisible(True)
+			column[3] = target
 
 
 EFFECTS = {
@@ -593,6 +798,9 @@ EFFECTS = {
 	'shake': _Shake,
 	'delta': _Delta,
 	'blur': _Blur,
+	'wipe': _Wipe,
+	'typewriter': _Typewriter,
+	'scramble': _Scramble,
 }
 
 

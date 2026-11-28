@@ -19,6 +19,10 @@ Styles:
   top right corner, in ``good`` when the number rose and ``bad`` when it fell; text with no number tints instead.
 - ``blur``: a numeric-text swap: the old text fades out stretching a little, the new one fades in from a stretch
   and settles upward, with faint offset copies for the motion.
+- ``wipe``: an edge sweeps left to right, the new text shows behind it and the old text is wiped away by it.
+- ``typewriter``: the new characters appear one at a time, left to right, each with a short fade.
+- ``scramble``: a decode: each changed digit or letter shows random ones that settle, left to right, into the new
+  character; text it cannot split into characters fades instead.
 
 Written as a style name, a style and a time (``slide 500ms``), or ``{style: slide, duration: 0.5s}``.
 """
@@ -30,11 +34,13 @@ from typing import Any, Optional
 
 __all__ = ('STYLES', 'DEFAULT_DURATION', 'DURATIONS', 'ChangeSpec', 'defaultDuration', 'parse', 'direction', 'number', 'decimals', 'deltaText')
 
-STYLES = ('none', 'fade', 'slide', 'flash', 'tint', 'roll', 'pop', 'flip', 'glow', 'shake', 'delta', 'blur')
+STYLES = ('none', 'fade', 'slide', 'flash', 'tint', 'roll', 'pop', 'flip', 'glow', 'shake', 'delta', 'blur',
+          'wipe', 'typewriter', 'scramble')
 DEFAULT_DURATION = 0.35
 #: A style's time when the dashboard gives none: the ones with more to see take a little longer.
 DURATIONS = {'roll': 0.6, 'pop': 0.45, 'flip': 0.5, 'tint': 0.8,
-             'glow': 0.9, 'shake': 0.45, 'delta': 1.2, 'blur': 0.4}
+             'glow': 0.9, 'shake': 0.45, 'delta': 1.2, 'blur': 0.4,
+             'wipe': 0.5, 'typewriter': 0.6, 'scramble': 0.7}
 #: Longest a change may take: a value that changes every second must have settled before the next one.
 MAX_DURATION = 2.0
 
