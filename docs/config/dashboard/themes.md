@@ -66,7 +66,7 @@ LevityDash includes five themes:
 | `default` | White on black. The original look. |
 | `dusk` | Light text on a cool, dark blue. One warm accent. |
 | `paper` | Dark ink on warm paper. A light theme. |
-| `neon` | Bright cyan on indigo-tinted darks. Rounded cards and a springy needle. |
+| `neon` | Bright cyan on indigo-tinted darks, a deeper sky, a springy needle. Every colour slot keeps its hue family, so a board made for `default` keeps its colour code. |
 | `neon-day` | The light version of `neon`. |
 
 To change the theme, edit the file and press `Ctrl+R`. A theme change needs a reload.
@@ -158,13 +158,13 @@ theme:
 
 ### Corners and motion
 
-Two radii are enough: one for a tile and a smaller one for the cards in it. Write them as a variable on a border, `border: {enabled: true, edges: all, radius: $radius_card, fill: $surface, weight: 0}`. The shipped themes other than `neon` leave both at `0`, so square corners stay square. `docs/design-references/themed-cards.levity` draws a tile of cards this way.
+Two radii are enough: one for a tile and a smaller one for the cards in it. Write them as a variable on a border, `border: {enabled: true, edges: all, radius: $radius_card, fill: $surface, weight: 0}`. The shipped themes other than `neon` leave both at `0`, so square corners stay square.
 
 `motion: spring` makes a hand and a [band](/config/dashboard/band.md) leave quickly, pass the new value by a few percent and settle on it, the curve `cubic-bezier(0.34, 1.56, 0.64, 1)`. `smooth` eases in and out and does not overshoot. The hand still ends exactly on the value. A hand with an `animate` time and a band with a `transition` time follow the theme.
 
 ### Tinted neutrals
 
-Pure greys look dead beside a coloured sky. `neon` takes every neutral from one hue (275, indigo) at low Oklch chroma, so the ground, cards, rules and text lean the same way. A theme of your own can do the same: pick one hue, keep chroma between 0.01 and 0.05, and step the lightness.
+Pure greys look dead beside a coloured sky. `neon` takes every neutral from one hue (272, indigo) at low Oklch chroma, so the ground, cards, rules and text lean the same way. A theme of your own can do the same: pick one hue, keep chroma between 0.01 and 0.05, and step the lightness.
 
 ## Change a few tokens for one dashboard
 
