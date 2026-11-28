@@ -1,0 +1,116 @@
+# LevityDash settings. Sections and keys are documented in docs/config/app.md.
+
+# Left empty, the location is guessed from your IP address. Set all three to pin it.
+[Location]
+timezone = ""
+latitude = ""
+longitude = ""
+
+[Display]
+dashboard = "default.levity"
+frontend = "Qt"
+fullscreen = false
+display = "smallest"
+width = "8.56in"
+height = "5.35in"
+liveUpdateTimedeltas = true
+
+# Your comfort range: the temperatures that feel neutral to you. The temperature scale is plain white across it
+# and every gradient that uses the scale (forecast line, outdoor temperature fill) follows it.
+# Write the unit as text ("55F", "13C"); a bare number uses the [Units] temperature.
+# Left out: 12 to 22 C (54 to 72 F).
+[Comfort]
+# low = "55F"
+# high = "72F"
+
+[QtOptions]
+openGL = true
+antialiasing = true
+antialiasingSamples = 8
+maxTextureSize = "10mb"
+pixmapCacheSize = "200mb"
+status-bar = true
+
+[MenuBar]
+fullscreen = "hidden"
+normal = "show"
+delay = 1.0
+
+[Fonts]
+# Font pickers list the bundled fonts, your fonts folder and some common families.
+# Add other installed families here, separated by commas: extra = "Fira Code, Comic Sans MS"
+default = "Nunito"
+"default.weight" = "Medium"
+compact = "Nunito"
+"compact.weight" = "Medium"
+title = "Roboto"
+"title.weight" = "Light"
+
+[Logging]
+# Warnings and errors only; INFO or DEBUG for more. The Logs menu changes it while the app runs.
+level = "WARNING"
+verbosity = 0
+# rich = 0 turns off rich's coloured, markup-parsed output (cheaper; LEVITY_LOG_RICH=0 does the same)
+rich = 1
+encoding = "utf-8"
+logTimeFormat = "%m/%d/%y %H:%M:%S"
+logFileWidth = 120
+maxLogFolderSize = "200mb"
+maxLogAge = "7 days"
+rolloverSize = "10mb"
+rolloverCount = 5
+prettyErrors = false
+maxPrettyErrorsFolderSize = "50mb"
+
+# unitcorn (units) reads the sections from here down.
+[Units]
+wind = "mph"
+temperature = "f"
+precipitationRate = "inch/*"
+precipitationHourly = "inch/hr"
+precipitation = "inch"
+pressure = "inHg"
+density = "lbs/ft^3"
+pollutionDensity = "ug/m"
+length = "mi"
+
+[UnitDefaults]
+precision = 1
+digit_budget = 3
+unit = ""
+suffix = ""
+unit_symbol = ""
+unit_spacer = true
+title = ""
+exp = 1
+slide = false
+show_unit = true
+shorten = false
+k_separator = false
+combine_unit_and_suffix = false
+trailing_zeros = "off"
+
+[UnitProperties]
+# precision=2 in a 2-digit budget only fits without the leading zero, which leadingZero's default ('auto')
+# handles on its own: 0.01 renders '.01', while 0.5 keeps its zero since it fits either way. Force it with
+# leading_zero = true or false if a panel wants one or the other unconditionally.
+Tiny = { precision = 3, digit_budget = 4 }
+Small = { precision = 2, digit_budget = 4 }
+Medium = { precision = 1, digit_budget = 3 }
+Large = { precision = 1, digit_budget = 3 }
+Huge = { precision = 2, digit_budget = 3 }
+pressure = { precision = 2, digit_budget = 4 }
+mmHg = { precision = 2, digit_budget = 4, trailing_zeros = "precision" }
+inHg = { precision = 2, digit_budget = 4, trailing_zeros = "precision" }
+voltage = { precision = 2, digit_budget = 3, unit_spacer = false }
+UVI = { unit_spacer = false }
+density = { precision = 3, digit_budget = 4, trailing_zeros = "precision" }
+time = { precision = 0, digit_budget = 2, unit_spacer = false, shorten = true }
+temperature = { precision = 0, digit_budget = 3, unit_spacer = false, shorten = false, k_separator = true, show_unit = false }
+direction = { cardinal = true, degrees = false, size_hint = "WW", shorten = true, digit_budget = 3 }
+strikes = { precision = 0, digit_budget = 2 }
+illuminance = { digit_budget = 3, shorten = true }
+wind = { precision = 1, digit_budget = 2 }
+precipitationRate = { precision = 2, digit_budget = 2 }
+precipitation = { precision = 2, digit_budget = 2 }
+humidity = { precision = 0, digit_budget = 2 }

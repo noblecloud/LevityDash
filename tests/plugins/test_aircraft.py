@@ -74,7 +74,7 @@ def test_feed_urls():
 
 def test_the_default_source_is_adsb_fi():
 	defaults = Aircraft.__defaultConfig__
-	assert isinstance(defaults, str) and 'source = adsb.fi' in defaults
+	assert isinstance(defaults, str) and 'source = "adsb.fi"' in defaults
 
 
 def test_a_capped_feed_waits_for_its_own_reset():

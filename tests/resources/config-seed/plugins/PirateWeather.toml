@@ -1,0 +1,4 @@
+[plugin]
+enabled = false
+apikey = ""
+defaultFor = "temperature precipitation wind pressure humidity storm"

@@ -96,7 +96,7 @@ items:
 
 ## Shared variables
 
-Put variables that every dashboard uses in `vars.yaml`, in the same folder as `config.ini`. Write the names at the top level.
+Put variables that every dashboard uses in `vars.yaml`, in the same folder as `config.toml`. Write the names at the top level.
 
 ```yaml
 upstairs: avg(indoor.temperature.temperature, where=home.upstairs)

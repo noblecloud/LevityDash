@@ -92,7 +92,7 @@ See the [documentation site](https://levitydash.app) for configuration, plugin s
 - Editable Margins for text modules
 - Resizable graph figures
 - Custom, value mapped, gradients for figure items
-- Your own comfort range (`[Comfort] low = 55°F, high = 72°F` in `config.ini`): every temperature gradient is neutral across it
+- Your own comfort range (`[Comfort]` `low = "55°F"`, `high = "72°F"` in `config.toml`): every temperature gradient is neutral across it
 - Text filters (i.e. lower, title, upper, digit to ordinal, etc.)
 
 ## Current Modules

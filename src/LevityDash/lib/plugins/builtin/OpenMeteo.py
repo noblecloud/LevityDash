@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime, timedelta
 
 from LevityDash.lib.config import userConfig
@@ -676,7 +677,7 @@ class OpenMeteo(REST, realtime=False, hourly=True, daily=True, recorded=True):
 
 	__defaultConfig__ = f"""
 	[plugin]
-	enabled = @ask(bool:True).message(Enable OpenMeteo Plugin?)
+	enabled = "@ask(bool:True).message(Enable OpenMeteo Plugin?)"
 	"""
 
 	def __init__(self, *args, **kwargs):

@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import timedelta, timezone, datetime
 from typing import Callable
 
@@ -147,12 +148,12 @@ _enableMessage = (
 	"information at https://pirateweather.net/en/latest/API/"
 )
 
-_defaultConfig = f""";All independent configs must have a plugin section
+_defaultConfig = f"""# All independent configs must have a plugin section
 
 [plugin]
-enabled = @ask(bool:False).message({_enableMessage})
-apikey = @ask(str:).message(Enter API Key)
-defaultFor = temperature precipitation wind pressure humidity storm
+enabled = {json.dumps(f"@ask(bool:False).message({_enableMessage})")}
+apikey = "@ask(str:).message(Enter API Key)"
+defaultFor = "temperature precipitation wind pressure humidity storm"
 """
 
 

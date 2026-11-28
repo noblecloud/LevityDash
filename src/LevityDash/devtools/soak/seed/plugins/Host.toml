@@ -1,5 +1,5 @@
 [plugin]
-enabled = True
+enabled = true
 
 [Host]
 interval = 5

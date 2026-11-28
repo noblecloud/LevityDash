@@ -5,7 +5,7 @@
 # nests in the quarter, a caption fills the open side), needle designs, clocks, word and tick labels, segmented fills.
 # Weather cards read the real sources (or a --scenario). Everything else reads made-up values
 # from the Mock plugin (src/LevityDash/lib/plugins/builtin/Mock.py), which is off until
-# Mock.ini says `enabled = True`.
+# Mock.toml says `enabled = true`.
 #
 # Look: dark grey track, one accent per card, Roboto Mono for numbers. Big numbers that sit in a card
 # rather than on a dial are `realtime.text` items placed by geometry. Every size is a share of its card

@@ -12,7 +12,7 @@ before the first LevityDash import:
 The value is a path to a YAML file, or the name of a file in
 ``docs/design-references/scenarios/``. With the variable unset this module
 marks itself ``__disabled__``: the loader never builds the plugin, never reads
-a scenario, and never writes ``Fixture.ini`` into the config directory. The
+a scenario, and never writes ``Fixture.toml`` into the config directory. The
 devtools take ``--scenario NAME`` and set the variable for you (see
 ``devtools/_seed.py``).
 
@@ -168,7 +168,7 @@ class Fixture(LifecyclePlugin, realtime=True, hourly=True, logged=False):
 
 	__defaultConfig__ = """
 	[plugin]
-	enabled = True
+	enabled = true
 	"""
 
 	def __init__(self):

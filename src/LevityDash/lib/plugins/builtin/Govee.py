@@ -1,3 +1,4 @@
+import json
 """Govee BLE thermometers.
 
 One ``Plugin`` instance per configured device, all sharing one BLE scanner.
@@ -237,23 +238,24 @@ _on_board_message = f"""{_on_board_banner}
 {_on_board_footer}""".replace('\n', '\\n')
 
 _defaultConfig = f"""
-[plugin] ; All independent configs must have a Config section
-enabled = @ask(bool:False).message({_on_board_message})
+# All independent configs must have a plugin section
+[plugin]
+enabled = {json.dumps(f"@ask(bool:False).message({_on_board_message})")}
 
-; One line per thermometer: alias = the name it advertises.
-; The alias names the device everywhere it appears - in keys
-; (indoor.temperature.temperature#bedroom) and as a source (Govee-bedroom).
-; The model is detected from the advertised name; no byte slices needed.
+# One line per thermometer: alias = the name it advertises.
+# The alias names the device everywhere it appears - in keys
+# (indoor.temperature.temperature#bedroom) and as a source (Govee-bedroom).
+# The model is detected from the advertised name; no byte slices needed.
 [devices]
-;bedroom = GVH5102_6736
-;terrarium = GVH5102_527D
+# bedroom = "GVH5102_6736"
+# terrarium = "GVH5102_527D"
 
-; Only needed for an unrecognised model or a hand-tuned field:
-;[device:garage]
-;name = GVH5075_A1B2
-;model = H5075
-;temperature.slice = [4:10]
-;temperature.expression = val / 10000
+# Only needed for an unrecognised model or a hand-tuned field:
+# ["device:garage"]
+# name = "GVH5075_A1B2"
+# model = "H5075"
+# "temperature.slice" = "[4:10]"
+# "temperature.expression" = "val / 10000"
 """
 
 
@@ -325,7 +327,7 @@ class Govee(BLEPlugin, realtime=True, logged=True):
 		"""One instance per configured device.
 
 		The loader hook (``PluginsLoader._instantiate``). Config is read once
-		here rather than per instance: every device shares one ``Govee.ini``,
+		here rather than per instance: every device shares one ``Govee.toml``,
 		because ``Plugin.getConfig`` keys off the class.
 		"""
 		# A bare probe, only to read the config: getConfig wants a plugin, but
@@ -342,7 +344,7 @@ class Govee(BLEPlugin, realtime=True, logged=True):
 		devices = parse_devices(getattr(config, 'parser', config))
 		if not devices:
 			pluginLog.info(
-				'Govee: no devices configured - add entries under [devices] in Govee.ini '
+				'Govee: no devices configured - add entries under [devices] in Govee.toml '
 				'(alias = advertised name)'
 			)
 			return []

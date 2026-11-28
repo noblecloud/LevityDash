@@ -111,7 +111,7 @@ def shouldStartFullscreen(fullscreen: bool, isExplicit: bool, forcedByArgv: bool
 	user has said nothing. Configured window sizes are clamped to the screen, so
 	on a display smaller than the requested size both axes clamp to the screen
 	bounds and similarity reaches ~1.0 - which used to force fullscreen even with
-	`fullscreen = False` written in config.ini. That is the whole bug this guard
+	`fullscreen = false` written in config.toml. That is the whole bug this guard
 	exists to prevent, and it only showed up on the smaller of two machines.
 	"""
 	if forcedByArgv:

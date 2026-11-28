@@ -107,7 +107,7 @@ Every theme defines these tokens.
 - `series-1` to `series-6` are for graph lines, in the order a dashboard uses them.
 - `display` is for titles and labels. `mono` is for numbers that line up. `body` is for everything else.
 - `load` is for a value from 0 to 100. `temperature` has stops pinned to °F. The stops follow the reading when the data is in °C.
-- `temperature` is also your [comfort range](#comfort-range): set `[Comfort]` in `config.ini` and its neutral band moves.
+- `temperature` is also your [comfort range](#comfort-range): set `[Comfort]` in `config.toml` and its neutral band moves.
 
 - The sizes are a type scale and a spacing scale. See [Sizes](#sizes).
 
@@ -284,12 +284,12 @@ poetry run python src/LevityDash/devtools/render_dashboard.py out.png \
 
 ## Comfort Range
 
-The `temperature` scale is neutral, plain white in the default theme, across a band of comfortable temperatures. That band is yours to set. In `config.ini`:
+The `temperature` scale is neutral, plain white in the default theme, across a band of comfortable temperatures. That band is yours to set. In `config.toml`:
 
-```ini
+```toml
 [Comfort]
-low = 55°F
-high = 72°F
+low = "55°F"
+high = "72°F"
 ```
 
 Everything that reads the scale follows it: `gradient: $temperature`, `gradient: TemperatureGradient`, `color: {scale: $temperature, of: ...}` and `fill-gradient: {scale: $temperature, ...}`. A dashboard needs no change. The scale stretches to the range you give, and the cold and hot stops keep their distance from its edges: every stop below the band moves with `low`, every stop above it with `high`. A theme that writes its own `temperature` scale is shifted the same way, taking 12 to 22 °C as its neutral band; a gradient written in place, not through the scale, does not move.

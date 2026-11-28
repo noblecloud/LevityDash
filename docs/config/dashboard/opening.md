@@ -1,6 +1,6 @@
 # Opening a dashboard
 
-LevityDash shows one dashboard at a time, named by `[Display] dashboard` in `config.ini` (a file in
+LevityDash shows one dashboard at a time, named by `[Display] dashboard` in `config.toml` (a file in
 `<config>/saves/dashboards/`). The other ways to open a file — one run, a handoff to the running window, a
 second window — open it without touching that setting.
 
@@ -127,7 +127,7 @@ already does. A child that exits is logged once and not restarted.
 given, with no ids and no geometry to remember. It cannot be combined with `--workspace`, and it is refused
 (`bad_request`, exit 4) rather than guessed at.
 
-`[Display] workspace` in `config.ini` names a workspace to open when no flag says otherwise. It is only a
+`[Display] workspace` in `config.toml` names a workspace to open when no flag says otherwise. It is only a
 default: `--dashboard`, `--window` or `--workspace` all win over it, and `[Display] dashboard` still means the
 single window you get with no flags at all.
 

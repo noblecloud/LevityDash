@@ -531,7 +531,7 @@ class Gradient(dict[str, MappedGradientValue[GradientValueType]]):
 	def decode(cls, data: str | dict | list | tuple) -> 'Gradient':
 		gradient = cls._decode(data)
 		if isinstance(data, str) and data.strip() in ('$temperature', 'TemperatureGradient'):
-			# The temperature scale follows the user's comfort range (`[Comfort]` in config.ini).
+			# The temperature scale follows the user's comfort range (`[Comfort]` in config.toml).
 			return cls._withComfort(gradient)
 		return gradient
 

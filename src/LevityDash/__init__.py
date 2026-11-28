@@ -121,12 +121,20 @@ class _LevityAppDirs(AppDirs):
 		# present) instead of the fresh-install state every debug-config run
 		# otherwise starts from - see tests/resources/config-seed/.
 		if _seed := os.environ.get("LEVITYDASH_CONFIG_SEED"):
-			# Layer example-config first (config.ini, templates, plugins.ini)
+			# Layer example-config first (config.toml, templates, plugins.toml)
 			# since a seeded dir is non-empty and LevityConfig's fresh-dir
 			# check will skip its own example-config copy; the seed overlays it.
 			from shutil import copytree
 			copytree(Path(__file__).parent / "resources" / "example-config", config, dirs_exist_ok=True)
 			copytree(_seed, config, dirs_exist_ok=True)
+			# A seed from before TOML (a real config directory) has config.ini where the example-config
+			# just put config.toml. The TOML would win and hide the seed's settings: drop it, so the
+			# seed's INI is migrated instead.
+			for _legacy in Path(_seed).rglob('*.ini'):
+				_relative = _legacy.relative_to(_seed)
+				if _relative.parts[-1] in ('config.ini',) or _relative.parts[0] == 'plugins':
+					if not (Path(_seed) / _relative).with_suffix('.toml').exists():
+						(config / _relative).with_suffix('.toml').unlink(missing_ok=True)
 
 	else:
 		data: Path = AppDirs.user_data_dir

@@ -2,7 +2,7 @@
 
 This section will cover the configuration options for LevityDash and the how to customise or make your own dashboards. 
 There are two main types of configuration options: application/plugin and dashboard/panel. 
-Currently, application/plugin configuration options use the ini format, while dashboard/panel configuration options use the YAML format.
+Currently, application/plugin configuration options use the TOML format, while dashboard/panel configuration options use the YAML format.
 
 ## Config Folder Location <!-- {docsify-ignore} -->
 
@@ -36,22 +36,22 @@ The location of the config folder is platform specific so the easiest way access
 
 This section is pretty self explanatory. If blank, Levity will guess the location based on the devices IP address.
 
-```ini
+```toml
 [Location]
-timezone = America/New_York
+timezone = "America/New_York"
 latitude = 37.8
 longitude = -76.1
 ```
 
 ## Display
 
-```ini
+```toml
 [Display]
-dashboard = default.levity
-frontend = Qt
-fullscreen = False
-width = 90%
-height = 600px
+dashboard = "default.levity"
+frontend = "Qt"
+fullscreen = false
+width = "90%"
+height = "600px"
 ```
 
 #### <div class=mono>dashboard:</div>
@@ -89,13 +89,13 @@ If provided a real-world measurement like centimeters, the value will be estimat
 
 ### Qt
 
-```ini
+```toml
 [QtOptions]
-openGL = True
-antialiasing = True
+openGL = true
+antialiasing = true
 antialiasingSamples = 8
-maxTextureSize = 10mb
-pixmapCacheSize = 200mb
+maxTextureSize = "10mb"
+pixmapCacheSize = "200mb"
 ```
 
 #### <div class=mono>openGL:</div>
@@ -135,10 +135,10 @@ The size of the invisible grab area around resize/drag handles, making them easi
 
 ## Menu Bar
 
-```ini
+```toml
 [MenuBar]
-fullscreen = hidden
-normal = show
+fullscreen = "hidden"
+normal = "show"
 delay = 1.0
 ```
 
@@ -146,12 +146,12 @@ Controls menu bar visibility per window state: `fullscreen` and `normal` each ac
 
 ## Fonts
 
-```ini
+```toml
 [Fonts]
-default = Nunito
-default.weight = Medium
-compact = Nunito
-compact.weight = Medium
+default = "Nunito"
+"default.weight" = "Medium"
+compact = "Nunito"
+"compact.weight" = "Medium"
 ```
 
 This is where you can define the default font and it's properties. The default font will be used wherever the font is not explicitly defined.
@@ -159,22 +159,22 @@ The compact font is used when the text will be rendered in space with a height l
 
 ## Logging
 
-```ini
+```toml
 [Logging]
-level = WARNING
+level = "WARNING"
 verbosity = 0
 rich = 1
-encoding = utf-8
-logFileFormat = %%Y-%%m-%%d_%%H-%%M-%%S
+encoding = "utf-8"
+logFileFormat = "%Y-%m-%d_%H-%M-%S"
 logFileWidth = 120
 
-maxLogFolderSize = 200mb
-maxLogAge = 7 days
-rolloverSize = 10mb
+maxLogFolderSize = "200mb"
+maxLogAge = "7 days"
+rolloverSize = "10mb"
 rolloverCount = 5
 
-prettyErrors = False
-maxPrettyErrorsFolderSize = 50mb
+prettyErrors = false
+maxPrettyErrorsFolderSize = "50mb"
 ```
 
 #### <div class=mono>level:</div>
@@ -242,22 +242,22 @@ The maximum size of the folder where pretty error files are stored. This is only
 The sections below are for UnitCorn (formerly WeatherUnits), the library that converts and localizes measurements for display. More information on how it's configured can be found in
 the [UnitCorn repo](https://github.com/noblecloud/unitcorn).
 
-```ini
+```toml
 [Units]
-wind = mi/hr
-temperature = f
-precipitationRate = inch/*
-precipitationHourly = inch/hr
-precipitation = inch
-pressure = inHg
-density = lbs/ft
-pollutionDensity = ug/m
-length = mi
+wind = "mi/hr"
+temperature = "f"
+precipitationRate = "inch/*"
+precipitationHourly = "inch/hr"
+precipitation = "inch"
+pressure = "inHg"
+density = "lbs/ft"
+pollutionDensity = "ug/m"
+length = "mi"
 
 [UnitDefaults]
 precision = 1
 max = 3
 
 [UnitProperties]
-temperature = precision=0, max=3, unitSpacer=False, shorten=False, kSeparator=True, decorator=º, showUnit=False
+temperature = { precision = 0, max = 3, unitSpacer = false, shorten = false, kSeparator = true, decorator = "º", showUnit = false }
 ```

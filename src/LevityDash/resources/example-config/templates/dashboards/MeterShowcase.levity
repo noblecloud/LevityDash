@@ -12,7 +12,7 @@
 # Keys come from the render harness's merged scenario (`stormy-day` + `gauge-cards` + every
 # Mock key at its base), so the pressure, temperature, humidity and wind cards read the weather
 # values and the battery and disk cards read the Mock plugin's made-up ones. Mock is off
-# until Mock.ini says `enabled = True`.
+# until Mock.toml says `enabled = true`.
 # Render: render_dashboard.py OUT.png --levity THIS --size 2560x1440 --settle 14
 - type: group
   name: main
