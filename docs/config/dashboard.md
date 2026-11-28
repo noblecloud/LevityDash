@@ -500,15 +500,19 @@ The column is as wide as the widest head plus the widest tail in it, and the tex
 
 Digits of one width (CSS `font-variant-numeric: tabular-nums`). Implied by `number-align`. The bundled Nunito, Roboto and Roboto Mono already set every digit to one width, so it only matters for a font that does not.
 
-#### <div class=mono>change-animation: none | fade | slide | flash </div>
+#### <div class=mono>change-animation: none | fade | slide | flash | tint | roll | pop | flip </div>
 
 How the text moves when the value it shows changes. Off (`none`) unless a dashboard asks.
 
 - `fade`: the old text fades out while the new one fades in.
 - `slide`: the old text leaves and the new one arrives a short way along the vertical: upward when the number rose, downward when it fell (a text with no number goes up). With the theme's `motion: spring` it passes its place a little and settles.
 - `flash`: the new text shows at once and glows in the theme's `accent` for a moment.
+- `tint`: like `flash`, in the theme's `good` when the number rose and `bad` when it fell (a stock ticker).
+- `roll`: an odometer. Only the characters that changed move, each rolling in a column of its own, up when the number rose and down when it fell; `99` to `100` keeps the columns lined up from the right. A warped label slides instead.
+- `pop`: the new text springs in from a little smaller while the old one fades.
+- `flip`: a split-flap board. The old text folds away about its middle and the new one folds down into place.
 
-A time may follow the style (`slide 500ms`), or write `{style: fade, duration: 0.6s}`. The default is 350ms, the most 2s. The first value after a load never animates, nor does a change from or to the `-` placeholder. Set it for every reading in a container through `shared:`:
+A time may follow the style (`slide 500ms`), or write `{style: fade, duration: 0.6s}`. The default is 350ms (roll 600ms, flip 500ms, pop 450ms, tint 800ms), the most 2s. The first value after a load never animates, nor does a change from or to the `-` placeholder. Set it for every reading in a container through `shared:`:
 
 ```yaml
 shared:

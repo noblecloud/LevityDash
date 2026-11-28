@@ -483,8 +483,11 @@ class Label(Panel, ColorMixin, tag='label'):
 		"""How the text moves when the value it shows changes: `fade` (the old text fades out as the new one fades in),
 		`slide` (the old text leaves and the new one arrives along the vertical, upward when the number rose and
 		downward when it fell; with the theme's `motion: spring` it settles with a small overshoot), `flash` (the new
-		text glows in the theme's `accent` for a moment) or `none` (the default). A time may follow, `slide 500ms`, or
-		write `{style: fade, duration: 0.6s}`; the default is 350ms and the most 2s. The first value after loading
+		text glows in the theme's `accent` for a moment), `tint` (the same in `good` when the number rose and `bad` when
+		it fell), `roll` (an odometer: only the characters that changed roll, each in its own column), `pop` (the new
+		text springs in from a little smaller), `flip` (a split-flap board: the old text folds away, the new one folds
+		in) or `none` (the default). A time may follow, `slide 500ms`, or write `{style: fade, duration: 0.6s}`; the
+		default is 350ms (roll 600ms, flip 500ms, pop 450ms, tint 800ms) and the most 2s. The first value after loading
 		never animates. Cascades through `shared:` like any label property, so
 		`shared.display.valueLabel.change-animation: slide` sets it for every reading below a container.
 		`LEVITY_CHANGE_ANIMATION=0` in the environment turns every change animation off."""
