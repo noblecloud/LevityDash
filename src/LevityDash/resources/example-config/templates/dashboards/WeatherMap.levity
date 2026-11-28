@@ -1,0 +1,12 @@
+# A whole-screen weather map, for a second display or a second window beside the main board.
+# Radar loops over the last two hours in the Dark Sky colours; the buttons top right switch
+# to temperature, wind or cloud. Centred on [Location] in the config: no lat or lon here.
+items:
+  - type: map
+    name: map
+    layer: radar
+    scheme: darksky
+    zoom: 7
+    borders: 1.6
+    picker: true
+    geometry: {x: 0%, y: 0%, width: 100%, height: 100%}

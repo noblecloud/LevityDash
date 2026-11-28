@@ -1,0 +1,4 @@
+- type: map
+  name: map
+  layer: wind
+  zoom: 7

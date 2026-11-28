@@ -1,0 +1,4 @@
+- type: map
+  name: map
+  layer: temperature
+  zoom: 7

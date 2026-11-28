@@ -571,6 +571,8 @@ def _loadItemGroup(parent: 'Panel', _type: str, group: list[dict], existing: lis
 					from LevityDash.lib.ui.frontends.PySide.Modules.Containers.SplitPanel import SplitPanel as Panel
 				case 'polar':
 					from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.item import Polar as Panel
+				case 'map':
+					from LevityDash.lib.ui.frontends.PySide.Modules.Displays.weathermap.item import WeatherMap as Panel
 				case _:
 					from LevityDash.lib.ui.frontends.PySide.Modules import Panel
 			panelType = Panel

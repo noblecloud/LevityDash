@@ -1,0 +1,4 @@
+- type: map
+  name: map
+  layer: clouds
+  zoom: 7
