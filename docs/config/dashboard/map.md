@@ -20,6 +20,7 @@ A map with no `lat` and `lon` is centred on `[Location]`, and a dot marks that p
 | `zoom` | `7` | 1 shows the world, 16 a street. Fractions are fine. Radar data stops at 7 and is stretched past that. |
 | `basemap` | `auto` | `auto` follows the theme's background (dark or light), or choose `dark`, `light`; `none` draws the layer on the dashboard itself. |
 | `scheme` | `darksky` | The colours of the rain and temperature: `darksky`, `apple`, `neon` or `classic` (below). |
+| `borders` | `1` | How strongly coasts, borders and rivers stand out: `0` as the base map draws them, up to `3`. |
 | `labels` | `true` | Place names over the data. They keep clear of the stamp, legend and credit. |
 | `opacity` | `0.92` radar, `0.74` fields | How solid the data layer is, `0` to `1`. |
 | `animate` | `true` | Radar loops through the last two hours. `false` shows the newest picture. Click the map to pause. |

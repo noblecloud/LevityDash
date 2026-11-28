@@ -351,6 +351,16 @@ def test_a_scheme_change_repaints_the_radar(dashboard, offline):
 		sandbox.delete()
 
 
+def test_borders_set_how_far_lines_are_lifted(dashboard, offline):
+	sandbox, item = _map(dashboard, layer='none', borders=0)
+	try:
+		assert item.borders == 0
+		item.borders = 2.5
+		assert item.borders == 2.5
+	finally:
+		sandbox.delete()
+
+
 def test_place_names_are_drawn(dashboard, offline):
 	sandbox, item = _map(dashboard, layer='none')
 	try:
@@ -427,7 +437,7 @@ def test_the_base_map_follows_the_theme_and_none_draws_no_tiles(dashboard, offli
 		sandbox.delete()
 
 
-@pytest.mark.parametrize('bad', [{'zoom': 40}, {'lat': 95}, {'range': [5, 5]}])
+@pytest.mark.parametrize('bad', [{'zoom': 40}, {'lat': 95}, {'range': [5, 5]}, {'borders': 5}])
 def test_bad_numbers_are_refused_with_a_reason(dashboard, offline, bad):
 	sandbox, item = _map(dashboard)
 	try:

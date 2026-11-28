@@ -8,6 +8,7 @@
   lon: -74.0
   basemap: auto               # auto | dark | light | none; auto follows the theme's background
   scheme: darksky             # darksky | apple | neon | classic: the rain and temperature colours
+  borders: 1                  # how strongly coasts, borders and rivers stand out, 0 to 3
   labels: true                # place names over the data
   opacity: 0.9                # of the data layer; left out: 0.92 for radar, 0.74 for the fields
   animate: true               # radar: loop the last two hours; false shows the latest picture
@@ -148,6 +149,7 @@ class WeatherMap(Panel, tag='map'):
 		self._zoom = 7.0
 		self._basemap = 'auto'
 		self._scheme = 'darksky'
+		self._borders = 1.0
 		self._labels = True
 		self._opacity: Optional[float] = None
 		self._animate = True
@@ -475,6 +477,22 @@ class WeatherMap(Panel, tag='map'):
 	def scheme(self, value) -> str:
 		return _oneOf('scheme', str(value).lower().replace(' ', '').replace('-', ''), _SCHEMES)
 
+	@StateProperty(key='borders', default=1.0, allowNone=False, after=refresh)
+	def borders(self) -> float:
+		"""How strongly coasts, borders and rivers stand out: 0 as the base map draws them, 1 the default, up to 3."""
+		return self._borders
+
+	@borders.setter
+	def borders(self, value: float):
+		value = float(value)
+		if not 0.0 <= value <= 3.0:
+			raise ValueError(f'borders is 0 to 3, not {value}')
+		self._borders = value
+
+	@borders.decode
+	def borders(self, value) -> float:
+		return max(0.0, min(3.0, float(value)))
+
 	@StateProperty(key='labels', default=True, allowNone=False, after=_reload)
 	def labels(self) -> bool:
 		return self._labels
@@ -596,7 +614,7 @@ class WeatherMap(Panel, tag='map'):
 		if lum is None:
 			return None
 		sea, land = self._tintColors(base)
-		tint = (key, tuple(sea), tuple(land))
+		tint = (key, tuple(sea), tuple(land), self._borders)
 		image = self._tint.get(tint)
 		if image is None:
 			span = (base.land - base.water) or 1.0
@@ -610,7 +628,7 @@ class WeatherMap(Panel, tag='map'):
 			# not next to anything brighter than land: the base's own state names are pale letters with dark edges
 			line = np.where((below > span*0.15) & (near < base.land + span*0.3), near - lum[0], 0.0)/span
 			line = np.clip((line - 0.15)*1.6, 0.0, 1.0)[..., None]
-			rgb = rgb + (_rgb('text') - rgb)*line*(0.42 if base.dark else 0.30)
+			rgb = rgb + (_rgb('text') - rgb)*np.clip(line*(0.42 if base.dark else 0.30)*self._borders, 0.0, 1.0)
 			out = np.empty(rgb.shape[:2] + (4,), dtype=np.uint8)
 			out[..., :3] = np.clip(rgb, 0, 255).astype(np.uint8)
 			out[..., 3] = 255
