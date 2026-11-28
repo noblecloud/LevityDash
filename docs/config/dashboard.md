@@ -500,6 +500,25 @@ The column is as wide as the widest head plus the widest tail in it, and the tex
 
 Digits of one width (CSS `font-variant-numeric: tabular-nums`). Implied by `number-align`. The bundled Nunito, Roboto and Roboto Mono already set every digit to one width, so it only matters for a font that does not.
 
+#### <div class=mono>change-animation: none | fade | slide | flash </div>
+
+How the text moves when the value it shows changes. Off (`none`) unless a dashboard asks.
+
+- `fade`: the old text fades out while the new one fades in.
+- `slide`: the old text leaves and the new one arrives a short way along the vertical: upward when the number rose, downward when it fell (a text with no number goes up). With the theme's `motion: spring` it passes its place a little and settles.
+- `flash`: the new text shows at once and glows in the theme's `accent` for a moment.
+
+A time may follow the style (`slide 500ms`), or write `{style: fade, duration: 0.6s}`. The default is 350ms, the most 2s. The first value after a load never animates, nor does a change from or to the `-` placeholder. Set it for every reading in a container through `shared:`:
+
+```yaml
+shared:
+  display:
+    valueLabel:
+      change-animation: slide
+```
+
+Only the changed item repaints while it runs, and only for its duration, so a dashboard whose values change once a minute pays nothing between changes. `LEVITY_CHANGE_ANIMATION=0` in the environment turns every change animation off (for an A/B on a slow display).
+
 #### <div class=mono>convertTo: str </div>
 
 The unit to convert the value to.
