@@ -12,6 +12,9 @@ colors:
   faint: '#8d8d96'        # units, ticks, secondary labels
   rule: '#3a3a42'         # dividers, gauge tracks, axes
   accent: '#ff8a3d'       # the one colour that draws the eye
+  accent-text: $accent    # the accent as ink: readable on $background. A light theme makes it darker than the fill
+  on-accent: $background  # ink on a solid $accent fill
+  sunk: $background       # a recess: gauge wells, graph plates, the track behind a bar
   good: '#4caf50'
   warn: '#fdd835'
   bad: '#e53935'
@@ -70,3 +73,8 @@ sizes:
   space_4: 6mm
   space_5: 8mm
   space_6: 12mm
+  radius_tile: 0          # corner radius of a panel that holds other cards
+  radius_card: 0          # corner radius of a card inside it (smaller than the tile). 0 is square, as always
+  # How a hand or a carousel settles after its value changes: `smooth` eases in and out and stops on the value
+  # (the original look); `spring` eases out with a small overshoot and settles, like a physical needle.
+  motion: smooth

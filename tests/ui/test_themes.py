@@ -137,3 +137,65 @@ def test_type_steps_rise_about_a_major_third():
 	steps = [float(sizes[k].rstrip('%')) for k in ('type_caption', 'type_label', 'type_value', 'type_head')]
 	assert steps == sorted(steps)
 	assert all(1.2 <= b / a <= 1.6 for a, b in zip(steps, steps[1:]))
+
+
+# Section: neon, the tinted-neutral themes
+
+def _hue_chroma(token):
+	from LevityDash.lib.ui.colors import contrast
+	c = Color.decode(token)
+	return contrast.hue_chroma((c.red / 255, c.green / 255, c.blue / 255))
+
+
+@pytest.mark.parametrize('name', ['neon', 'neon-day'])
+def test_neon_neutrals_lean_one_hue(name):
+	theme.activate(name)
+	hues = []
+	for token in ('$background', '$surface', '$sunk', '$rule', '$muted', '$faint'):
+		hue, chroma = _hue_chroma(token)
+		assert 0.004 < chroma < 0.06, (name, token)  # tinted, not grey and not coloured
+		hues.append(hue)
+	assert max(hues) - min(hues) < 15
+
+
+@pytest.mark.parametrize('name', ['default', 'dusk', 'paper', 'neon', 'neon-day'])
+def test_accent_text_is_readable_on_the_background(name):
+	from LevityDash.lib.ui.colors import contrast
+	theme.activate(name)
+	back = Color.decode('$background')
+	ink = Color.decode('$accent-text')
+	assert contrast.contrast((ink.red / 255, ink.green / 255, ink.blue / 255), (back.red / 255, back.green / 255, back.blue / 255)) >= 4.5
+
+
+def test_neon_day_text_accent_is_darker_than_its_fill():
+	theme.activate('neon-day')
+	assert Color.decode('$accent-text').hex != Color.decode('$accent').hex
+
+
+@pytest.mark.parametrize('name', ['neon', 'neon-day'])
+def test_neon_palette_passes_the_audit(name):
+	from LevityDash.lib.ui.colors import contrast
+	assert contrast.audit(theme.load(name)) == []
+
+
+def test_two_radii_and_square_by_default():
+	assert theme.load('default').size('radius_card') == 0
+	neon = theme.load('neon')
+	assert neon.size('radius_tile') == '28px'
+	assert neon.size('radius_card') == '21px'
+	assert '$radius_card' not in neon.sizes()  # sizes come out as variables by bare name
+	assert 'radius_card' in neon.sizes()
+
+
+def test_motion_follows_the_theme():
+	from LevityDash.lib.ui import motion
+	theme.activate('default')
+	assert motion.style() == 'smooth'
+	theme.activate('neon')
+	assert motion.style() == 'spring'
+	easing = motion.curve()
+	peak = max(easing.valueForProgress(i / 100) for i in range(101))
+	assert 1.03 < peak < 1.15  # overshoots a little
+	assert easing.valueForProgress(1.0) == pytest.approx(1.0)
+	assert easing.valueForProgress(0.0) == pytest.approx(0.0)
+	assert max(motion.curve('smooth').valueForProgress(i / 100) for i in range(101)) <= 1.0

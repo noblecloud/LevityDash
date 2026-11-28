@@ -33,12 +33,12 @@ import math
 import time
 from typing import Any, List, Optional
 
-from PySide6.QtCore import QEasingCurve, QTimer, QVariantAnimation
+from PySide6.QtCore import QTimer, QVariantAnimation
 from PySide6.QtGui import QTransform
 from PySide6.QtWidgets import QGraphicsItem
 
 from LevityDash.lib.stateful import DefaultGroup, StateProperty
-from LevityDash.lib.ui import UILogger as guiLog
+from LevityDash.lib.ui import UILogger as guiLog, motion
 from LevityDash.lib.ui.frontends.PySide.Modules.Panel import Panel
 from LevityDash.lib.ui.frontends.PySide.Modules.condition import parseSeconds
 from LevityDash.lib.ui.frontends.PySide.snapshot import Snapshot, renderSubtree
@@ -245,7 +245,7 @@ class Band(Panel, tag='band'):
 			animation.setStartValue(float(start))
 			animation.setEndValue(float(end))
 			animation.setDuration(int(self._transition * 1000))
-			animation.setEasingCurve(QEasingCurve.Type.InOutCubic)
+			animation.setEasingCurve(motion.curve())
 			animation.valueChanged.connect(lambda value: self.place(float(value) % count))
 			animation.finished.connect(lambda: self._arrive(end % count))
 			self._animation = animation

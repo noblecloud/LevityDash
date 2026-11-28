@@ -1,0 +1,35 @@
+# The daylight counterpart of `neon`: the same indigo-tinted greys and the same hues, with lightness flipped.
+# The accent fill stays bright cyan; `accent-text` is a darker cyan, because bright cyan is unreadable as ink on a light ground.
+name: neon-day
+mode: light
+extends: neon
+
+colors:
+  background: '#eceef7'
+  surface: '#f9fafe'
+  sunk: '#dee1ec'
+  rule: '#c0c3d1'
+  text: '#161929'
+  muted: '#42465b'
+  faint: '#5d6278'
+  accent: '#00dae4'
+  accent-text: '#00637b'
+  on-accent: '#121524'
+  good: '#007834'
+  warn: '#875800'
+  bad: '#b32228'
+  info: '#1666aa'
+  series-1: '#ae1173'
+  series-2: '#1666aa'
+  series-3: '#007834'
+  series-4: '#7444b4'
+  series-5: '#ac3500'
+  series-6: '#4f6b00'
+  needle-glow: {color: $text, alpha: 0.5}
+  moon: '#f0d98a'
+  moon-shade: '#4a4a63'
+  moon-glow: {color: '#d9a93a', alpha: 0.7}
+
+scales:
+  temperature: {0°F: '#1666aa', 45°F: '#00728a', 70°F: '#161929', 85°F: '#ac3500', 100°F: '#ae1173'}
+  sky: {0: '#dfe8f7', 1: '#efe6f4'}

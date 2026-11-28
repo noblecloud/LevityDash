@@ -1,0 +1,48 @@
+# Neon on tinted neutrals. Every grey leans the same way: one hue (272, indigo) at low chroma, so the ground, the
+# cards, the rules and the text read as one family and sit under the navy and violet of the sky ground. One accent
+# (cyan) carries the eye; magenta is series-1 only, so it stays rare. Written in Oklch, stored as hex.
+name: neon
+mode: dark
+extends: default
+
+colors:
+  background: '#070a1a'   # oklch(0.15 0.035 272)
+  surface: '#1a2037'      # 0.25, a card face; cards mix it with their quantity's hue
+  sunk: '#02040f'         # 0.11, a recess below the ground
+  rule: '#4a5374'     # oklch(0.45 0.055 272): gauge and bar tracks, axes
+  text: '#f2f5fe'
+  muted: '#c3cadf'
+  faint: '#8e97b5'
+  accent: '#00f1ff'       # oklch(0.87 0.16 205)
+  accent-text: $accent    # bright enough to read on the dark ground as it is
+  on-accent: $background
+  good: '#4eed80'
+  warn: '#fbd530'
+  bad: '#ff5a63'
+  info: '#4fc1ff'
+  # Each slot keeps the hue family it has in `default` (a board that draws wind in series-6 still draws it lime),
+  # pushed to full neon chroma. Magenta takes the pink slot, series-1, so it shows only where a board asks for it.
+  series-1: '#ff29c5'     # magenta
+  series-2: '#4fc1ff'     # blue
+  series-3: '#4eed80'     # green
+  series-4: '#bf96ff'     # violet
+  series-5: '#ff8717'     # orange
+  series-6: '#bff538'     # lime
+  needle-glow: {color: $accent, alpha: 0.6}
+  moon: $text
+  moon-shade: '#111736'
+  moon-glow: {color: $accent, alpha: 0.7}
+
+scales:
+  load: {0: $good, 60: $warn, 85: $bad}
+  temperature: {0°F: '#4fc1ff', 45°F: '#00f1ff', 70°F: '#f2f5fe', 85°F: '#ff8717', 100°F: '#ff29c5'}
+  sky: {0: '#050816', 0.55: '#0b1030', 1: '#1b1044'}
+  # The sun-following ground (`background: sky`), deeper and more saturated than `default` so the neon reads against
+  # it: indigo night, a magenta dusk on the horizon, a deep blue day. Still dark enough for light text at every height.
+  sky-top: {-18: '#020308', -12: '#04061a', -6: '#0b0c33', -2: '#170f45', 0: '#1a1a5a', 6: '#13246a', 20: '#0e2a74', 60: '#0b2a7c'}
+  sky-horizon: {-18: '#05061a', -12: '#0a0b2a', -6: '#28134e', -2: '#5e1a66', 0: '#9a2f6a', 6: '#4f3a86', 20: '#1f4b98', 60: '#2659ac'}
+
+sizes:
+  radius_tile: 28px       # two radii, tile over card, about 4:3
+  radius_card: 21px
+  motion: spring
