@@ -113,3 +113,7 @@ See the [documentation site](https://levitydash.app) for configuration, plugin s
 - More plot types
 
 See the full [roadmap](docs/roadmap.md) for what's done, in progress, and planned.
+
+# License
+
+LevityDash is dual-licensed: free under the [GPLv3](LICENSE.txt) for everyone, including companies, or under a [commercial license](COMMERCIAL-LICENSE.md) if you want to ship it inside a closed-source product. See [LICENSING.md](LICENSING.md) for which one fits and for third-party notices.
