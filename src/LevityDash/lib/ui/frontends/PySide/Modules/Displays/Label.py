@@ -484,7 +484,8 @@ class Label(Panel, ColorMixin, tag='label'):
 		`slide` (the old text leaves and the new one arrives along the vertical, upward when the number rose and
 		downward when it fell; with the theme's `motion: spring` it settles with a small overshoot), `flash` (the new
 		text glows in the theme's `accent` for a moment), `tint` (the same in `good` when the number rose and `bad` when
-		it fell), `roll` (an odometer: only the characters that changed roll, each in its own column), `pop` (the new
+		it fell), `roll` (an odometer: only the characters that changed roll, each in its own column), `slot` (a slot machine: a
+		changed digit spins through the digits between), `count` (the number counts from the old value to the new), `pop` (the new
 		text springs in from a little smaller), `flip` (a split-flap board: the old text folds away, the new one folds
 		in), `glow` (a soft halo in the theme's `accent` swells around the new text and fades), `shake` (the new text
 		shakes sideways a little, for an alert), `delta` (a small badge with the difference, `+3` or `−0.4`, floats up from
@@ -492,7 +493,7 @@ class Label(Panel, ColorMixin, tag='label'):
 		text fades out stretching, the new one settles in from a stretch and a little below), `wipe` (an edge sweeps left
 		to right, revealing the new text and wiping the old), `typewriter` (the new characters appear one at a time),
 		`scramble` (changed digits and letters decode through random ones) or `none` (the default). A time may follow,
-		`slide 500ms`, or write `{style: fade, duration: 0.6s}`; the default is 350ms (roll 600ms, flip 500ms, pop 450ms,
+		`slide 500ms`, or write `{style: fade, duration: 0.6s}`; the default is 350ms (roll 600ms, slot 800ms, count 700ms, flip 500ms, pop 450ms,
 		tint 800ms, glow 900ms, shake 450ms, delta 1.2s, blur 400ms, wipe 500ms, typewriter 600ms, scramble 700ms) and the
 		most 2s. The first value after loading
 		never animates. Cascades through `shared:` like any label property, so

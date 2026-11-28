@@ -11,6 +11,8 @@ Styles:
 - ``tint``: like ``flash``, in the theme's ``good`` when the number rose and ``bad`` when it fell (a stock ticker).
 - ``roll``: an odometer: only the characters that changed move, each rolling in its own column, up when the
   number rose and down when it fell. Text whose shape it cannot split (a warped label) slides instead.
+- ``slot``: a slot machine: like ``roll``, but a changed digit spins through the digits in between before it lands.
+- ``count``: a count-up: the number runs from the old value to the new one (text with no number fades).
 - ``pop``: the new text springs in from a little smaller while the old one fades.
 - ``flip``: a split-flap board: the old text folds away about its horizontal middle and the new one folds in.
 - ``glow``: a soft halo in the theme's ``accent`` swells around the new text and fades.
@@ -34,11 +36,11 @@ from typing import Any, Optional
 
 __all__ = ('STYLES', 'DEFAULT_DURATION', 'DURATIONS', 'ChangeSpec', 'defaultDuration', 'parse', 'direction', 'number', 'decimals', 'deltaText')
 
-STYLES = ('none', 'fade', 'slide', 'flash', 'tint', 'roll', 'pop', 'flip', 'glow', 'shake', 'delta', 'blur',
-          'wipe', 'typewriter', 'scramble')
+STYLES = ('none', 'fade', 'slide', 'flash', 'tint', 'roll', 'slot', 'count', 'pop', 'flip', 'glow', 'shake',
+          'delta', 'blur', 'wipe', 'typewriter', 'scramble')
 DEFAULT_DURATION = 0.35
 #: A style's time when the dashboard gives none: the ones with more to see take a little longer.
-DURATIONS = {'roll': 0.6, 'pop': 0.45, 'flip': 0.5, 'tint': 0.8,
+DURATIONS = {'roll': 0.6, 'slot': 0.8, 'count': 0.7, 'pop': 0.45, 'flip': 0.5, 'tint': 0.8,
              'glow': 0.9, 'shake': 0.45, 'delta': 1.2, 'blur': 0.4,
              'wipe': 0.5, 'typewriter': 0.6, 'scramble': 0.7}
 #: Longest a change may take: a value that changes every second must have settled before the next one.

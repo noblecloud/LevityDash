@@ -86,7 +86,7 @@ def change(dashboard, label, text):
 ADDED = {'glow': 3, 'shake': 0, 'blur': 5}
 
 
-@pytest.mark.parametrize('style', ['fade', 'slide', 'flash', 'tint', 'roll', 'pop', 'flip', 'glow', 'shake', 'delta', 'blur', 'wipe', 'typewriter', 'scramble'])
+@pytest.mark.parametrize('style', ['fade', 'slide', 'flash', 'tint', 'roll', 'slot', 'count', 'pop', 'flip', 'glow', 'shake', 'delta', 'blur', 'wipe', 'typewriter', 'scramble'])
 def test_change_runs_and_ends_clean(dashboard, sandbox, style):
 	label = labelIn(sandbox, '71°', **{'change-animation': f'{style} 200ms'})
 	settle(dashboard)
@@ -363,3 +363,62 @@ def test_scramble_falls_back_to_fade(dashboard, sandbox, monkeypatch):
 	assert isinstance(animator.effect.inner, valuechange._Fade)
 	animator.stop()
 	assert label.textBox.childItems() == []
+def test_slot_strip_passes_through_the_numerals_between(dashboard, sandbox):
+	label = labelIn(sandbox, '5', **{'change-animation': 'slot 2s'})
+	settle(dashboard)
+	change(dashboard, label, '9')
+	effect = label.textBox._changeAnimator.effect
+	assert len(effect.strips) == 1
+	_, strip, steps = effect.strips[0]
+	# 5 6 7 8 9: five numerals stacked one column pitch apart
+	assert steps == 4 and strip.path().boundingRect().height() > 4 * abs(effect.travel)
+	label.textBox._changeAnimator.stop()
+
+
+def test_slot_wraps_and_counts_down(dashboard, sandbox):
+	label = labelIn(sandbox, '19', **{'change-animation': 'slot 2s'})
+	settle(dashboard)
+	change(dashboard, label, '22')  # rose: the ones column wraps 9 0 1 2
+	effect = label.textBox._changeAnimator.effect
+	assert sorted(strip[2] for strip in effect.strips) == [1, 3]
+	change(dashboard, label, '20')  # fell: 2 1 0
+	effect = label.textBox._changeAnimator.effect
+	assert effect.sign == -1 and [strip[2] for strip in effect.strips] == [2]
+	label.textBox._changeAnimator.stop()
+
+
+def test_slot_non_digit_rolls(dashboard, sandbox):
+	label = labelIn(sandbox, 'N', **{'change-animation': 'slot 2s'})
+	settle(dashboard)
+	change(dashboard, label, 'S')
+	effect = label.textBox._changeAnimator.effect
+	assert effect.strips == [] and len(effect.columns) == 1
+	label.textBox._changeAnimator.stop()
+
+
+def test_count_shows_an_intermediate_number_and_restores(dashboard, sandbox):
+	label = labelIn(sandbox, '71.0°', **{'change-animation': 'count 2s'})
+	settle(dashboard)
+	box = label.textBox
+	full = box.path()
+	change(dashboard, label, '72.0°')
+	anim = box._changeAnimator
+	anim.animation.pause()
+	effect = anim.effect
+	assert effect.counting and box.path().isEmpty()
+	anim._frame(0.3)
+	assert effect.shown not in (None, '71.0°', '72.0°') and effect.shown.endswith('°')
+	assert 71.0 < value_change.number(effect.shown) < 72.0
+	assert not effect.child.path().isEmpty()
+	anim.stop()
+	assert not box.path().isEmpty()
+	assert box.path().boundingRect().size() == full.boundingRect().size()
+
+
+def test_count_falls_back_without_a_number(dashboard, sandbox):
+	label = labelIn(sandbox, 'N', **{'change-animation': 'count 2s'})
+	settle(dashboard)
+	change(dashboard, label, 'S')
+	effect = label.textBox._changeAnimator.effect
+	assert not effect.counting and not label.textBox.path().isEmpty()
+	label.textBox._changeAnimator.stop()

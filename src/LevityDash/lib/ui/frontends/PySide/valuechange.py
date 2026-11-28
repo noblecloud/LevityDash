@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import math
 import os
+import re
+import time
 from typing import NamedTuple, Optional
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QVariantAnimation
@@ -24,7 +26,7 @@ from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem, QGraphicsRectIte
 from shiboken6 import isValid
 
 from LevityDash.lib.ui import Color
-from LevityDash.lib.ui.value_change import ChangeSpec, deltaText, direction
+from LevityDash.lib.ui.value_change import ChangeSpec, deltaText, direction, number
 
 __all__ = ('ChangeAnimator', 'Before', 'enabled', 'glyphs')
 
@@ -458,7 +460,7 @@ class _Stretch(QGraphicsTransform):
 #: is faintest and swells last, so the halo seems to spread.
 GLOW_LAYERS = ((0.09, 0.30), (0.17, 0.18), (0.27, 0.10))
 #: `shake`: swings and how far, as a share of the text's height.
-SHAKE_SWINGS, SHAKE_AMPLITUDE = 3.5, 0.04
+SHAKE_SWINGS, SHAKE_AMPLITUDE = 3.5, 0.08
 #: `delta`: the badge's digit height as a share of the text's, and how far it floats, as a share of its own height.
 DELTA_SCALE, DELTA_RISE = 0.4, 0.9
 #: `blur`: the stretch the text starts or ends at, how far the new text starts below its place (share of height),
@@ -786,6 +788,165 @@ class _Scramble(_Delegating):
 			column[3] = target
 
 
+#: A `slot` strip never holds more than this many digits: a column spins at most once round.
+SLOT_MAX_DIGITS = 10
+#: The longest a `count` goes between two rebuilds of its text, in seconds (about 30 a second).
+COUNT_INTERVAL = 1 / 30
+_COUNT_NUMBER = re.compile(r'[-−]?\d[\d,]*(?:\.(\d+))?')
+
+
+class _Slot(_Roll):
+	"""A slot machine: like `roll`, but a changed digit spins through the digits in between before it lands."""
+
+	def _pairs(self, old, oldChars, new, newChars):
+		pairs = _Roll._pairs(old, oldChars, new, newChars)
+		# remember the characters of each column that moves, in the order `_Roll.begin` keeps them
+		size = max(len(old), len(new))
+		po, pn = size - len(old), size - len(new)
+		chars = []
+		for i, pair in enumerate(pairs):
+			if not isinstance(pair[0], str):
+				chars.append((oldChars[i - po] if i >= po else None, newChars[i - pn] if i >= pn else None))
+		self.chars = chars
+		return pairs
+
+	def begin(self):
+		self.chars = []
+		self.strips = []
+		super().begin()
+		if not getattr(self, 'columns', None) or len(self.chars) != len(self.columns):
+			return
+		clips = [c for c in self.children if isinstance(c, QGraphicsRectItem)]
+		if len(clips) != len(self.columns):
+			return
+		mapping, kept = self.oldToNew(), []
+		pitch = abs(self.travel)
+		for (delay, outgoing, incoming), (co, cn), clip in zip(self.columns, self.chars, clips):
+			steps = self._steps(co, cn)
+			if steps is None or outgoing is None or incoming is None:
+				kept.append((delay, outgoing, incoming))
+				continue
+			strip = self._strip(co, cn, steps, outgoing, incoming, pitch, mapping)
+			if strip is None:
+				kept.append((delay, outgoing, incoming))
+				continue
+			_drop(outgoing)
+			_drop(incoming)
+			child = _child(clip, strip, self.item.brush(), self.item.pen())
+			self.strips.append((delay, child, steps))
+		self.columns = kept
+
+	def _steps(self, co, cn):
+		"""How many digits the strip moves through between the old and the new one, or `None` for a non-digit."""
+		if not (co and cn and co.isdecimal() and cn.isdecimal()):
+			return None
+		a, b = int(co), int(cn)
+		n = (b - a) % 10 if self.sign > 0 else (a - b) % 10
+		return min(n, SLOT_MAX_DIGITS - 1) or None
+
+	def _strip(self, co, cn, steps, outgoing, incoming, pitch, mapping):
+		item = self.item
+		font = item.font()
+		target = incoming.path().boundingRect()
+		probe = QPainterPath()
+		probe.addText(0, 0, font, cn)
+		ink = probe.boundingRect()
+		if ink.height() <= 0 or target.height() <= 0:
+			return None
+		scale = target.height() / ink.height()
+		strip = QPainterPath()
+		strip.setFillRule(incoming.path().fillRule())
+		a = int(co)
+		for k in range(steps + 1):
+			y = self.sign * k * pitch
+			if k == 0:
+				strip.addPath(QTransform.fromTranslate(0, y).map(mapping.map(outgoing.path())))
+			elif k == steps:
+				strip.addPath(QTransform.fromTranslate(0, y).map(incoming.path()))
+			else:
+				digit = str((a + self.sign * k) % 10)
+				glyph = QPainterPath()
+				glyph.addText(0, 0, font, digit)
+				b = glyph.boundingRect()
+				place = QTransform()
+				place.translate(target.center().x() - b.center().x() * scale, target.bottom() - b.bottom() * scale + y)
+				place.scale(scale, scale)
+				strip.addPath(place.map(glyph))
+		return strip
+
+	def frame(self, t):
+		super().frame(t)
+		span = 1.0 - self.stagger
+		for delay, child, steps in self.strips:
+			local = _clamp((t - delay) / span) if span > 0 else 1.0
+			p = SLOT_EASE.valueForProgress(local)
+			child.setPos(0, -self.sign * steps * abs(self.travel) * p)
+
+
+SLOT_EASE = QEasingCurve(QEasingCurve.Type.OutQuart)
+
+
+class _Count(_Fade):
+	"""A count-up: the number runs from the old value to the new one, in the item's font, drawn as one child path
+	that is rebuilt only when the shown string changes (and at most 30 times a second). Text without a number fades."""
+
+	def begin(self):
+		old, new = number(self.before.text), number(self.text)
+		match = _COUNT_NUMBER.search(self.text)
+		target = self.item.path()
+		self.counting = old is not None and new is not None and match is not None and not target.isEmpty()
+		if not self.counting:
+			return super().begin()
+		self.old, self.new = old, new
+		self.decimals = len(match.group(1) or '')
+		self.grouped = ',' in match.group(0)
+		self.prefix, self.suffix = self.text[:match.start()], self.text[match.end():]
+		self.full = QPainterPath(target)
+		self.target = target.boundingRect()
+		self.font = self.item.font()
+		reference = QPainterPath()
+		reference.addText(0, 0, self.font, self.text)
+		ink = reference.boundingRect()
+		self.scale = self.target.height() / ink.height() if ink.height() > 0 else 1.0
+		self.shown = None
+		self.stamp = 0.0
+		self.curve = QEasingCurve(QEasingCurve.Type.OutCubic)
+		self.child = _child(self.item, QPainterPath(), self.item.brush(), self.item.pen())
+		self.children.append(self.child)
+		self.item.setPath(QPainterPath())
+
+	def shownText(self, value: float) -> str:
+		body = f'{value:,.{self.decimals}f}' if self.grouped else f'{value:.{self.decimals}f}'
+		return self.prefix + body + self.suffix
+
+	def rebuild(self, text: str):
+		path = QPainterPath()
+		path.addText(0, 0, self.font, text)
+		ink = path.boundingRect()
+		place = QTransform()
+		place.translate(self.target.right() - ink.right() * self.scale, self.target.bottom() - ink.bottom() * self.scale)
+		place.scale(self.scale, self.scale)
+		path = place.map(path)
+		path.setFillRule(self.full.fillRule())
+		self.child.setPath(path)
+		self.shown = text
+
+	def frame(self, t):
+		if not self.counting:
+			return super().frame(t)
+		text = self.shownText(self.old + (self.new - self.old) * self.curve.valueForProgress(t))
+		now = time.monotonic()
+		if text != self.shown and (self.shown is None or t >= 1.0 or now - self.stamp >= COUNT_INTERVAL):
+			self.rebuild(text)
+			self.stamp = now
+
+	def end(self):
+		item = self.item
+		super().end()
+		if isValid(item) and getattr(self, 'full', None) is not None:
+			item.setPath(self.full)
+
+
 EFFECTS = {
 	'fade': _Fade,
 	'slide': _Slide,
@@ -801,6 +962,8 @@ EFFECTS = {
 	'wipe': _Wipe,
 	'typewriter': _Typewriter,
 	'scramble': _Scramble,
+	'slot': _Slot,
+	'count': _Count,
 }
 
 
@@ -832,7 +995,7 @@ class ChangeAnimator:
 		if not isValid(item) or before.path.isEmpty():
 			return
 		style = spec.style
-		if style == 'roll' and getattr(item, '_warpActive', False):
+		if style in ('roll', 'slot') and getattr(item, '_warpActive', False):
 			style = 'slide'
 		if style == 'delta' and deltaText(before.text, text) is None:
 			style = 'tint'
