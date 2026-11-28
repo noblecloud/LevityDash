@@ -385,7 +385,7 @@ class Label(Panel, ColorMixin, tag='label'):
 		"""Line values up on an anchor and not on the whole string: `end` right-aligns the digits, `decimal`
 		puts the decimal point on one line (a value with no point acts as if it ended in one). `char:X` anchors on
 		a character, `nth:N` on the Nth character and `special:N` on the Nth special one (not a digit, letter or
-		space); a negative N counts from the end. The unit and any other text after the cut hang to its right. Members of one size group (and one tier) share the line.
+		space); `match:REGEX[@N]` on the start of the Nth regular-expression match. A negative N counts from the end. The unit and any other text after the cut hang to its right. Members of one size group (and one tier) share the line.
 		The text is not changed: nothing is padded."""
 		return self.textBox._numberAlign
 

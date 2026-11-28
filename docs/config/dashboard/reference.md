@@ -88,7 +88,7 @@ Full tables with the CSS equivalent of every option: [layout.md](layout.md). Whi
 
 - `font` (a family or a theme token such as `$mono`), `weight` (`Thin ExtraLight Light Regular Medium DemiBold Bold ExtraBold Black`, or a number), `color`, `alignment` (fuzzy words: `left`, `center`, `top right`...), `text-scale-type` (`fill | auto | font | string`), `condense`, `icon`, `filters`.
 - `text:` may be a list, longest first; the longest that fits is used (`condense` sets how far a text may shrink before a shorter one is chosen).
-- Numbers: `precision`, `unit-string`, `unitPosition`, `unitSize`, `shorten`, `format`, `format-hint` (size against the widest value so 7, 13, 101 match), `number-align: end | decimal | char:X | nth:N | special:N`, `tabular`, `convertTo` (a unit).
+- Numbers: `precision`, `unit-string`, `unitPosition`, `unitSize`, `shorten`, `format`, `format-hint` (size against the widest value so 7, 13, 101 match), `number-align: end | decimal | char:X | nth:N | special:N | match:REGEX`, `tabular`, `convertTo` (a unit).
 - Positions (`DisplayPosition`): `auto inline newline above below hidden baseline inside outside floating floatunder floatabove center left right top bottom`.
 - **Size groups**: `matchingGroup: name` (or `{group, matchAll: true}`, or `name@panel`) makes labels share one size per tier. See [size-groups.md](size-groups.md) and `design-standards.md` in the project files for the type-scale rules (hero, value, label, header; ratio 1.25 to 1.33; at most five sizes).
 

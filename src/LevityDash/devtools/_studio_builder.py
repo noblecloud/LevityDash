@@ -82,7 +82,7 @@ NUMBER_ALIGN_TIP = ('Line a column of values up on the number and not on the who
                     '(a value with none acts as if it ended in one); "end of the digits" right-aligns the digits. The unit hangs to the right, '
                     'the text is never changed, and the items of one size group share the line. The other choices anchor on a special character '
                     '(not a digit, letter or space; a leading sign does not count). Type char:X (a character), nth:N (the Nth character) or '
-                    'special:N for another; a negative N counts from the end.')
+                    'special:N for another, or match:REGEX (the start of the first match; match:REGEX@N for the Nth); a negative N counts from the end.')
 
 
 def numberAlignField(node: dict, kind: str) -> Optional[str]:
