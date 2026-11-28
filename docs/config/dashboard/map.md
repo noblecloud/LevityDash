@@ -32,7 +32,7 @@ A map with no `lat` and `lon` is centred on `[Location]`, and a dot marks that p
 ## Where it comes from
 
 - **Radar**: [RainViewer](https://www.rainviewer.com/), composite radar for most of the world, a new picture every ten minutes. The service paints its own colours, so each colour is read back as an echo strength and drawn again in a palette that belongs to the dashboard (below). It is free for personal use and stops at zoom 7.
-- **Temperature, wind, clouds**: [Open-Meteo](https://open-meteo.com/). One request for a coarse grid of points over the map (up to 70) every half hour, smoothed with a spline into a picture and clipped to the range of the points, so it shows the pattern across a region, not any one town. Wind also draws an arrow at each point. Open-Meteo's free tier is for non-commercial use and counts every point as a call.
+- **Temperature, wind, clouds**: [Open-Meteo](https://open-meteo.com/). One request for a coarse grid of points over the map (up to 70) every half hour, smoothed with a spline into a picture and clipped to the range of the points, so it shows the pattern across a region, not any one town. Wind also draws an arrow at each point. Open-Meteo's free tier is for non-commercial use and counts every point as a call and is shared by IP address; when it refuses, the same grid is fetched from [MET Norway](https://api.met.no/) (no key, one request per point), and the credit in the corner names whichever answered.
 - **Base map**: Esri's grey canvas tiles, read as sea and land and redrawn in your theme's `background`, `text` and `faint`, so it sits in the dashboard instead of on it. Credit for each service is printed small in the corner.
 
 Tiles are kept on disk under the app's cache directory (`maps/`) and sit out a restart.

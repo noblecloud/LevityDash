@@ -404,3 +404,27 @@ def test_a_bad_word_in_a_dashboard_makes_an_error_tile_not_a_map(dashboard, offl
 		for panel in dashboard.scene.base.childItems():
 			if isinstance(panel, WeatherMap):
 				panel.delete()
+
+
+# -- MET Norway fallback -------------------------------------------------------------------------------------------
+
+MET = json.dumps({'properties': {'timeseries': [{'time': '2026-11-28T13:00:00Z', 'data': {'instant': {'details': {
+	'air_temperature': 6.5, 'wind_speed': 5.9, 'wind_from_direction': 247.7, 'cloud_area_fraction': 88.3}}}}]}})
+
+
+def test_a_met_norway_point_has_the_same_four_fields():
+	values, when = data.parseMet(MET)
+	assert values == {'temperature': 6.5, 'wind': 5.9, 'direction': 247.7, 'clouds': 88.3}
+	assert when == 1795870800
+
+
+def test_the_grid_falls_back_to_met_norway_when_open_meteo_refuses(monkeypatch):
+	def fetch(url, ttl=0.0, directory=None, timeout=0):
+		if 'open-meteo' in url:
+			return json.dumps({'error': True, 'reason': 'Daily API request limit exceeded.'})
+		return MET
+
+	monkeypatch.setattr(data, 'fetch', fetch)
+	grid = data.fetchFields(geo.Viewport(40.0, -88.0, 5, 800, 600).grid(3, 2))
+	assert grid.source == 'MET Norway' and grid.values['temperature'].shape == (2, 3)
+	assert (grid.values['temperature'] == 6.5).all()

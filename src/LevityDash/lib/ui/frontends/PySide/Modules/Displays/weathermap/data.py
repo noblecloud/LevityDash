@@ -142,6 +142,7 @@ class FieldGrid:
 	"""Values on a `rows` x `columns` grid laid evenly across a view, plus when they are from."""
 	values: dict[str, np.ndarray]  #: name -> `(rows, columns)` floats, NaN where the service gave nothing
 	time: Optional[int] = None
+	source: str = 'Open-Meteo'
 
 
 def fieldUrl(points: list[list[tuple[float, float]]]) -> str:
@@ -176,6 +177,41 @@ def parseFields(text: str | bytes, rows: int, columns: int) -> FieldGrid:
 	return FieldGrid({name: array.reshape(rows, columns) for name, array in values.items()}, stamp)
 
 
+MET_URL = 'https://api.met.no/weatherapi/locationforecast/2.0/compact?lat={lat:.4f}&lon={lon:.4f}'
+_MET_FIELDS = {'temperature': 'air_temperature', 'wind': 'wind_speed', 'direction': 'wind_from_direction', 'clouds': 'cloud_area_fraction'}
+
+
+def parseMet(text: str | bytes) -> tuple[dict[str, Optional[float]], Optional[int]]:
+	"""One MET Norway point answer: the first (current) step's values, and its unix time."""
+	from datetime import datetime
+	step = json.loads(text)['properties']['timeseries'][0]
+	details = step['data']['instant']['details']
+	when = int(datetime.fromisoformat(step['time'].replace('Z', '+00:00')).timestamp())
+	return {name: details.get(source) for name, source in _MET_FIELDS.items()}, when
+
+
+def fetchFieldsMet(points: list[list[tuple[float, float]]], ttl: float = 600.0) -> FieldGrid:
+	"""The same grid from MET Norway (no key, worldwide; one request a point, so it is the fallback, not the first choice)."""
+	from concurrent.futures import ThreadPoolExecutor
+	rows, columns = len(points), len(points[0])
+	flat = [p for row in points for p in row]
+	with ThreadPoolExecutor(max_workers=6) as pool:
+		answers = list(pool.map(lambda p: parseMet(fetch(MET_URL.format(lat=p[0], lon=p[1]), ttl=ttl)), flat))
+	values = {name: np.full(rows*columns, np.nan) for name in FIELDS}
+	for i, (point, _) in enumerate(answers):
+		for name, value in point.items():
+			if value is not None:
+				values[name][i] = value
+	return FieldGrid({n: a.reshape(rows, columns) for n, a in values.items()}, answers[0][1], source='MET Norway')
+
+
 def fetchFields(points: list[list[tuple[float, float]]], ttl: float = 600.0) -> FieldGrid:
-	body = fetch(fieldUrl(points), ttl=ttl)
-	return parseFields(body, len(points), len(points[0]))
+	"""Open-Meteo's grid, or MET Norway's when Open-Meteo refuses (its free tier is shared by IP and runs out)."""
+	try:
+		body = fetch(fieldUrl(points), ttl=ttl)
+		return parseFields(body, len(points), len(points[0]))
+	except Exception as first:  # noqa: BLE001 - any failure is a reason to try the other service
+		try:
+			return fetchFieldsMet(points, ttl=ttl)
+		except Exception as second:  # noqa: BLE001
+			raise OSError(f'Open-Meteo: {first}; MET Norway: {second}') from second

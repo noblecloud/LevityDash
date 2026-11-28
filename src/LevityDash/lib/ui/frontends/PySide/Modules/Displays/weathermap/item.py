@@ -863,7 +863,7 @@ class WeatherMap(Panel, tag='map'):
 		if self._layer == 'radar':
 			parts.append('RainViewer')
 		elif self._layer in ('temperature', 'wind', 'clouds'):
-			parts.append('Open-Meteo')
+			parts.append(self._fieldGrid.source if self._fieldGrid is not None else 'Open-Meteo')
 		if not parts:
 			return
 		unit = min(rect.width(), rect.height())
