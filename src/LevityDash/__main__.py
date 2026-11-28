@@ -261,8 +261,10 @@ def _openWorkspace(active) -> None:
 	first = active.windows[0]
 	workspace.setActive(active)
 	workspace.setLaunch(workspace.Launch.fromWindow(first))
-	# The file's theme, else the first window's dashboard theme, which every other window then follows.
-	workspace.setTheme(active.theme or workspace.dashboardTheme(workspace.dashboardPath(first.dashboard)))
+	# Only a theme the file names is forced on every window. Without one, each window is a process of its own and
+	# resolves the theme its own dashboard asks for: forcing window 1's theme on the others broke any board that
+	# writes a token only its own theme defines (`$cloud`).
+	workspace.setTheme(active.theme)
 	LevityDashboard.dashboardOverride = workspace.dashboardPath(first.dashboard)
 	rest = active.windows[1:]
 	print(f'levitydash: workspace {active.name!r}: window {first.id!r} here, {len(rest)} more window(s)', flush=True)

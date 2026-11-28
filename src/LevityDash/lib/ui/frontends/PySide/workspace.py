@@ -8,7 +8,7 @@ what `[Display] dashboard` means; `[Display] workspace` may name one to open whe
 The file lives in `<config>/workspaces/<name>.yaml`::
 
 	name: desk                                  # optional; the file's stem by default
-	theme: night                                # optional; the one theme the whole layout uses
+	theme: night                                # optional; forced on every window, else each follows its dashboard
 	windows:
 	  - id: main                                # stable, unique in the file; the window's control socket id
 	    dashboard: home.levity                  # <config>/saves/dashboards, then cwd, or absolute
@@ -558,7 +558,7 @@ def launch() -> Launch | None:
 
 
 def setTheme(name: str | None) -> None:
-	"""The one theme this layout uses: the file's, else window 1's dashboard's."""
+	"""The theme the workspace file forces on every window, or None to let each window follow its own dashboard."""
 	global _THEME
 	_THEME = name or None
 
