@@ -8,6 +8,11 @@ Styles:
   rose and downward when it fell (a text that is not a number goes up). The travel follows the theme's ``motion``
   curve when the theme has one, so ``motion: spring`` lets it settle with a small overshoot.
 - ``flash``: the new text replaces the old at once and glows in the theme's ``accent`` for a moment.
+- ``tint``: like ``flash``, in the theme's ``good`` when the number rose and ``bad`` when it fell (a stock ticker).
+- ``roll``: an odometer: only the characters that changed move, each rolling in its own column, up when the
+  number rose and down when it fell. Text whose shape it cannot split (a warped label) slides instead.
+- ``pop``: the new text springs in from a little smaller while the old one fades.
+- ``flip``: a split-flap board: the old text folds away about its horizontal middle and the new one folds in.
 
 Written as a style name, a style and a time (``slide 500ms``), or ``{style: slide, duration: 0.5s}``.
 """
@@ -17,10 +22,12 @@ import re
 from dataclasses import dataclass
 from typing import Any, Optional
 
-__all__ = ('STYLES', 'DEFAULT_DURATION', 'ChangeSpec', 'parse', 'direction', 'number')
+__all__ = ('STYLES', 'DEFAULT_DURATION', 'DURATIONS', 'ChangeSpec', 'defaultDuration', 'parse', 'direction', 'number')
 
-STYLES = ('none', 'fade', 'slide', 'flash')
+STYLES = ('none', 'fade', 'slide', 'flash', 'tint', 'roll', 'pop', 'flip')
 DEFAULT_DURATION = 0.35
+#: A style's time when the dashboard gives none: the ones with more to see take a little longer.
+DURATIONS = {'roll': 0.6, 'pop': 0.45, 'flip': 0.5, 'tint': 0.8}
 #: Longest a change may take: a value that changes every second must have settled before the next one.
 MAX_DURATION = 2.0
 
@@ -31,16 +38,24 @@ _NUMBER = re.compile(r'[-−]?\d+(?:\.\d+)?')
 @dataclass(frozen=True)
 class ChangeSpec:
 	style: str
-	duration: float = DEFAULT_DURATION
+	duration: float = None
+
+	def __post_init__(self):
+		if self.duration is None:
+			object.__setattr__(self, 'duration', defaultDuration(self.style))
 
 	@property
 	def ms(self) -> int:
 		return int(round(self.duration * 1000))
 
 	def encode(self) -> str | dict:
-		if self.duration == DEFAULT_DURATION:
+		if self.duration == defaultDuration(self.style):
 			return self.style
 		return {'style': self.style, 'duration': f'{round(self.duration * 1000)}ms'}
+
+
+def defaultDuration(style: str) -> float:
+	return DURATIONS.get(style, DEFAULT_DURATION)
 
 
 def _seconds(value: Any) -> float:
@@ -81,7 +96,7 @@ def parse(value: Any) -> Optional[ChangeSpec]:
 		raise ValueError(f'change-animation must be {", ".join(STYLES)}, not {style!r}')
 	if style == 'none':
 		return None
-	return ChangeSpec(style, DEFAULT_DURATION if duration is None else _seconds(duration))
+	return ChangeSpec(style, None if duration is None else _seconds(duration))
 
 
 def number(text: Optional[str]) -> Optional[float]:

@@ -82,7 +82,7 @@ def change(dashboard, label, text):
 	settle(dashboard, 2)
 
 
-@pytest.mark.parametrize('style', ['fade', 'slide', 'flash'])
+@pytest.mark.parametrize('style', ['fade', 'slide', 'flash', 'tint', 'roll', 'pop', 'flip'])
 def test_change_runs_and_ends_clean(dashboard, sandbox, style):
 	label = labelIn(sandbox, '71°', **{'change-animation': f'{style} 200ms'})
 	settle(dashboard)
@@ -102,15 +102,58 @@ def test_change_runs_and_ends_clean(dashboard, sandbox, style):
 	assert box.transformations() == []
 	assert box.opacity() == pytest.approx(opacity)
 	assert box.text == '72°'
+	assert not box.path().isEmpty()
+
+
+def test_glyphs_split_one_per_character(dashboard, sandbox):
+	from LevityDash.lib.ui.frontends.PySide.valuechange import glyphs
+	label = labelIn(sandbox, '18.4% 0°')
+	settle(dashboard)
+	assert len(glyphs(label.textBox.path())) == len('18.4%0°')
+
+
+def test_roll_moves_only_the_changed_characters(dashboard, sandbox):
+	from LevityDash.lib.ui.frontends.PySide.valuechange import glyphs
+	label = labelIn(sandbox, '1,071°', **{'change-animation': 'roll 2s'})
+	settle(dashboard)
+	box = label.textBox
+	change(dashboard, label, '1,082°')
+	effect = box._changeAnimator.effect
+	assert len(effect.columns) == 2  # the 7 and the 1
+	assert len(glyphs(box.path())) == 4  # 1 , 0 ° stay in the outline
+	assert effect.travel > 0
+	box._changeAnimator.stop()
+	assert len(glyphs(box.path())) == 6
+
+
+def test_roll_handles_a_longer_number(dashboard, sandbox):
+	label = labelIn(sandbox, '99', **{'change-animation': 'roll 2s'})
+	settle(dashboard)
+	change(dashboard, label, '100')
+	effect = label.textBox._changeAnimator.effect
+	assert len(effect.columns) == 3
+	assert effect.columns[0][1] is None  # the new leading 1 rolls in from nothing
+	label.textBox._changeAnimator.stop()
+
+
+def test_tint_follows_direction(dashboard, sandbox):
+	from LevityDash.lib.ui import Color
+	label = labelIn(sandbox, '50', **{'change-animation': 'tint 2s'})
+	settle(dashboard)
+	change(dashboard, label, '40')
+	assert label.textBox._changeAnimator.effect.glow.brush().color() == Color.role('bad').QColor
+	change(dashboard, label, '45')
+	assert label.textBox._changeAnimator.effect.glow.brush().color() == Color.role('good').QColor
+	label.textBox._changeAnimator.stop()
 
 
 def test_slide_direction_follows_the_number(dashboard, sandbox):
 	label = labelIn(sandbox, '50', **{'change-animation': 'slide 2s'})
 	settle(dashboard)
 	change(dashboard, label, '60')
-	rising = label.textBox._changeAnimator.travel
+	rising = label.textBox._changeAnimator.effect.travel
 	change(dashboard, label, '40')
-	falling = label.textBox._changeAnimator.travel
+	falling = label.textBox._changeAnimator.effect.travel
 	assert rising > 0 > falling
 	label.textBox._changeAnimator.stop()
 

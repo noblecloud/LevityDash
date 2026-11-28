@@ -594,6 +594,10 @@ class Text(QGraphicsPathItem):
 	def _changeBefore(self):
 		"""The look to animate away from, or `None` when a change now should not animate."""
 		from LevityDash.lib.ui.frontends.PySide.valuechange import ChangeAnimator, enabled
+		if (animator := self._changeAnimator) is not None and animator.running:
+			# a rebuild during a change (a new value, a size group refit): end it first, so the outline and
+			# opacity captured are the finished ones
+			animator.stop()
 		old = self._builtText
 		if old is None or old in self._PLACEHOLDERS or self.path().isEmpty() or self.scene() is None or not self.isVisible():
 			return None
@@ -605,10 +609,19 @@ class Text(QGraphicsPathItem):
 		self._builtText = text if self.icon is None else None
 		if before is None or text == before.text or self._builtText is None or text in self._PLACEHOLDERS:
 			return
+		# started at the end of updateTransform, once the new outline has its final place
+		self._pendingChange = (before, text)
+
+	_pendingChange = None
+
+	def _startPendingChange(self):
+		pending, self._pendingChange = self._pendingChange, None
+		if pending is None or self._changeSpec is None:
+			return
 		from LevityDash.lib.ui.frontends.PySide.valuechange import ChangeAnimator
 		if (animator := self._changeAnimator) is None:
 			animator = self._changeAnimator = ChangeAnimator(self)
-		animator.start(self._changeSpec, before, text)
+		animator.start(self._changeSpec, *pending)
 
 	def _applyInk(self):
 		"""Brush and pen from the fill colour and `outline`. With no outline the glyphs are filled and
@@ -1004,6 +1017,8 @@ class Text(QGraphicsPathItem):
 		if self._changeSpec is not None:
 			# updateTransform starts from identity, so the look a change animates away from is kept here
 			self._shownTransform = QTransform(self.transform())
+			if self._pendingChange is not None:
+				self._startPendingChange()
 		if not self._fixedFontSize and (scale := transform.m11()) > 0:
 			before, self._fitScale = self._decimalRatio(self.font()), scale
 			after = self._decimalRatio(self.font())
