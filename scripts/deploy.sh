@@ -6,9 +6,9 @@ REMOTE_HOST="lambda"
 REMOTE_CODE_DIR="~/Code"
 
 LOCAL_LEVITY="/Users/noblecloud/Code/LevityDash"
-LOCAL_WU="/Users/noblecloud/Code/unitcorn"
+LOCAL_UC="/Users/noblecloud/Code/unitcorn"
 REMOTE_LEVITY="${REMOTE_CODE_DIR}/LevityDash"
-REMOTE_WU="${REMOTE_CODE_DIR}/unitcorn"
+REMOTE_UC="${REMOTE_CODE_DIR}/unitcorn"
 
 # ─── Rsync exclude patterns ──────────────────────────────────────────────────
 # These prevent local test/layout/config changes from overwriting the deployed version.
@@ -56,7 +56,7 @@ Usage: deploy.sh [OPTIONS]
 Deploy LevityDash and UnitCorn to lambda.
 
 Options:
-  --skip-wu          Skip syncing UnitCorn
+  --skip-uc          Skip syncing UnitCorn (--skip-wu still works)
   --skip-install     Skip poetry install on lambda
   --restart          Restart the LevityDash service after deploy
   --config-only      Only sync config/settings (not code)
@@ -71,14 +71,14 @@ EOF
 }
 
 # ─── Parse args ─────────────────────────────────────────────────────────────
-SKIP_WU=false
+SKIP_UC=false
 SKIP_INSTALL=false
 RESTART=false
 CONFIG_ONLY=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --skip-wu) SKIP_WU=true; shift ;;
+    --skip-uc|--skip-wu) SKIP_UC=true; shift ;;
     --skip-install) SKIP_INSTALL=true; shift ;;
     --restart) RESTART=true; shift ;;
     --config-only) CONFIG_ONLY=true; shift ;;
@@ -86,6 +86,22 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1"; usage; exit 1 ;;
   esac
 done
+
+# ─── Rename handling ─────────────────────────────────────────────────────────
+# The library checkout used to be called WeatherUnits. LevityDash's pyproject now
+# path-depends on ../unitcorn, so a checkout under the old name would not resolve.
+check_local_rename() {
+  if [ ! -d "${LOCAL_UC}" ] && [ -d "${LOCAL_UC%/*}/WeatherUnits" ]; then
+    echo "✗ ${LOCAL_UC} not found, but ${LOCAL_UC%/*}/WeatherUnits is."
+    echo "  The checkout was renamed: mv ${LOCAL_UC%/*}/WeatherUnits ${LOCAL_UC}"
+    exit 1
+  fi
+}
+
+# One-time move of the old checkout on lambda, keeping its .venv (poetry install relinks it).
+migrate_remote() {
+  ssh "${REMOTE_HOST}" "cd ${REMOTE_CODE_DIR} && if [ ! -d unitcorn ] && [ -d WeatherUnits ]; then mv WeatherUnits unitcorn && echo '  → renamed ${REMOTE_CODE_DIR}/WeatherUnits to unitcorn'; fi"
+}
 
 # ─── Sync LevityDash code (not settings) ────────────────────────────────────
 sync_levity() {
@@ -98,8 +114,8 @@ sync_levity() {
 }
 
 # ─── Sync UnitCorn ───────────────────────────────────────────────────────
-sync_wu() {
-  echo "── Syncing UnitCorn to ${REMOTE_HOST}:${REMOTE_WU} ──"
+sync_uc() {
+  echo "── Syncing UnitCorn to ${REMOTE_HOST}:${REMOTE_UC} ──"
   rsync -avz --delete \
     --exclude='.git/' \
     --exclude='.venv/' \
@@ -117,8 +133,8 @@ sync_wu() {
     --exclude='.envrc' \
     --exclude='poetry.lock' \
     -e ssh \
-    "${LOCAL_WU}/" \
-    "${REMOTE_HOST}:${REMOTE_WU}/"
+    "${LOCAL_UC}/" \
+    "${REMOTE_HOST}:${REMOTE_UC}/"
 }
 
 # ─── Post-sync: install deps + UnitCorn in editable mode ────────────────
@@ -130,13 +146,13 @@ post_sync() {
     export PATH="$HOME/.local/bin:$HOME/.poetry/bin:$PATH"
 
     LEVITY_DIR=~/Code/LevityDash
-    WU_DIR=~/Code/unitcorn
+    UC_DIR=~/Code/unitcorn
 
     echo "  → Configuring Poetry to use local .venv..."
     poetry config virtualenvs.in-project true --local 2>/dev/null || true
 
     echo "  → Installing unitcorn deps..."
-    cd "$WU_DIR"
+    cd "$UC_DIR"
     poetry config virtualenvs.in-project true
     poetry install --no-interaction
 
@@ -161,10 +177,12 @@ main() {
 
   echo "═══ Deploying to ${REMOTE_HOST} ═══"
 
+  if [ "$SKIP_UC" = false ]; then check_local_rename; fi
+  migrate_remote
   sync_levity
 
-  if [ "$SKIP_WU" = false ]; then
-    sync_wu
+  if [ "$SKIP_UC" = false ]; then
+    sync_uc
   fi
 
   if [ "$SKIP_INSTALL" = false ]; then
