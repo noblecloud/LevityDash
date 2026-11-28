@@ -30,7 +30,7 @@ same reading whatever the gauge's range, and whatever unit the data arrives in.
 - Gauge and graph use gradients through `ColorGradientMixin` (Gauge.py) and Plot
   (Graph.py).
 - In Studio, the gradient stop list editor is in `devtools/_studio_editors.py`.
-  The zone and marker editors already have a "values in" WeatherUnits unit selector.
+  The zone and marker editors already have a "values in" UnitCorn unit selector.
   Reuse that.
 
 ## Expected change
@@ -45,7 +45,7 @@ same reading whatever the gauge's range, and whatever unit the data arrives in.
    ```
 
    A list form also works: `- {at: 37°C, color: '#ff4a4a'}`. Parse the unit with
-   WeatherUnits, using the same parser that range, zone and marker values use. Convert
+   UnitCorn, using the same parser that range, zone and marker values use. Convert
    each stop into the display's data unit when the stops are applied. A bare number keeps
    its current meaning, so existing files do not change.
 2. **Mixed units** in one gradient are allowed, and each stop converts on its own. A

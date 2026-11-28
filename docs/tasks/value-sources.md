@@ -119,8 +119,8 @@ use, service latency, or any key a plugin publishes.
    expression at load with a logged error naming the item, and treat it as
    missing.
 
-6. **Units go through WeatherUnits.** A sum or difference keeps the unit.
-   A ratio gives a derived unit (WeatherUnits already models
+6. **Units go through UnitCorn.** A sum or difference keeps the unit.
+   A ratio gives a derived unit (UnitCorn already models
    numerator/denominator pairs, for example `DistanceOverTime`). A
    comparison converts both sides to one unit first. A bare number takes
    the unit of the other operand, so `temp - 5` subtracts 5 degrees in the
@@ -278,7 +278,7 @@ child whose `when:` holds (a child with no `when:` is the default); `hold`,
 `docs/design-references/presets/uv-or-rain.levity`.
 
 A number may carry a unit in an expression: `90°F`, `30 mph`, `0.1 in/hr`,
-`55%`. The unit text is read by WeatherUnits (`ui/colors/stopunits.py`) and
+`55%`. The unit text is read by UnitCorn (`ui/colors/stopunits.py`) and
 the number is converted to the unit of the measurement it is compared with, so
 `temperature > 90°F` holds whatever unit the data arrives in. A unit that
 measures something else (`temperature > 30 mph`) is an error at evaluation: it

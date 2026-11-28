@@ -28,7 +28,7 @@ One word per idea, in docs, UI strings and new code. The class `Panel`, `Central
 ## Commands
 
 ```sh
-poetry install                          # install deps (has local dev dep: ../WeatherUnits)
+poetry install                          # install deps (has local dev dep: ../unitcorn)
 poetry run LevityDash                   # run desktop app (mode=live by default)
 poetry run LevityDash --dashboard PATH  # show one dashboard file; the configured dashboard is left alone
                                         # (if the app is already open, the file is handed to that window)

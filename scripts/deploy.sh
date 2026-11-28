@@ -53,10 +53,10 @@ usage() {
   cat <<EOF
 Usage: deploy.sh [OPTIONS]
 
-Deploy LevityDash and WeatherUnits to lambda.
+Deploy LevityDash and UnitCorn to lambda.
 
 Options:
-  --skip-wu          Skip syncing WeatherUnits
+  --skip-wu          Skip syncing UnitCorn
   --skip-install     Skip poetry install on lambda
   --restart          Restart the LevityDash service after deploy
   --config-only      Only sync config/settings (not code)
@@ -97,9 +97,9 @@ sync_levity() {
     "${REMOTE_HOST}:${REMOTE_LEVITY}/"
 }
 
-# ─── Sync WeatherUnits ───────────────────────────────────────────────────────
+# ─── Sync UnitCorn ───────────────────────────────────────────────────────
 sync_wu() {
-  echo "── Syncing WeatherUnits to ${REMOTE_HOST}:${REMOTE_WU} ──"
+  echo "── Syncing UnitCorn to ${REMOTE_HOST}:${REMOTE_WU} ──"
   rsync -avz --delete \
     --exclude='.git/' \
     --exclude='.venv/' \
@@ -121,7 +121,7 @@ sync_wu() {
     "${REMOTE_HOST}:${REMOTE_WU}/"
 }
 
-# ─── Post-sync: install deps + WeatherUnits in editable mode ────────────────
+# ─── Post-sync: install deps + UnitCorn in editable mode ────────────────
 post_sync() {
   echo "── Post-sync on ${REMOTE_HOST} ──"
   ssh "${REMOTE_HOST}" bash -s <<'REMOTE_SCRIPT'

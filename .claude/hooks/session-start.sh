@@ -1,6 +1,6 @@
 #!/bin/bash
 # Cloud sessions only: make the container match the dev Mac.
-# Python 3.14, en_US.UTF-8 locale, unitcorn (WeatherUnits repo) beside the repo, Poetry env in .venv.
+# Python 3.14, en_US.UTF-8 locale, unitcorn beside the repo, Poetry env in .venv.
 set -euo pipefail
 
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
