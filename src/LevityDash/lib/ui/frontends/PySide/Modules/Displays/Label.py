@@ -23,6 +23,7 @@ from LevityDash.lib.ui.frontends.PySide.utils import addRect, DebugPaint
 from LevityDash.lib.ui.Geometry import Alignment, AlignmentFlag, Geometry, parseSize, Position, Size, Margins
 from LevityDash.lib.ui.fill_gradient import decodeFillGradient, FillGradient
 from LevityDash.lib.ui.font_axes import decodeFontAxes, FontAxes
+from LevityDash.lib.ui.value_change import ChangeSpec, parse as parseChange
 from LevityDash.lib.ui.icons import getIcon, Icon
 from LevityDash.lib.utils import clearCacheAttr
 from unitcorn.length import Length
@@ -476,6 +477,30 @@ class Label(Panel, ColorMixin, tag='label'):
 	@tabular.setter
 	def tabular(self, value: bool):
 		self.textBox.setTabular(value)
+
+	@StateProperty(key='change-animation', default=None, allowNone=True)
+	def changeAnimation(self) -> ChangeSpec | None:
+		"""How the text moves when the value it shows changes: `fade` (the old text fades out as the new one fades in),
+		`slide` (the old text leaves and the new one arrives along the vertical, upward when the number rose and
+		downward when it fell; with the theme's `motion: spring` it settles with a small overshoot), `flash` (the new
+		text glows in the theme's `accent` for a moment) or `none` (the default). A time may follow, `slide 500ms`, or
+		write `{style: fade, duration: 0.6s}`; the default is 350ms and the most 2s. The first value after loading
+		never animates. Cascades through `shared:` like any label property, so
+		`shared.display.valueLabel.change-animation: slide` sets it for every reading below a container.
+		`LEVITY_CHANGE_ANIMATION=0` in the environment turns every change animation off."""
+		return self.textBox._changeSpec
+
+	@changeAnimation.setter
+	def changeAnimation(self, value: ChangeSpec | None):
+		self.textBox.setChangeAnimation(value)
+
+	@changeAnimation.decode
+	def changeAnimation(self, value) -> ChangeSpec | None:
+		return parseChange(value)
+
+	@changeAnimation.encode
+	def changeAnimation(self, value):
+		return value.encode() if isinstance(value, ChangeSpec) else value
 
 	@StateProperty(key='italic', default=False, dependencies={'geometry', 'text'})
 	def italic(self) -> bool:
