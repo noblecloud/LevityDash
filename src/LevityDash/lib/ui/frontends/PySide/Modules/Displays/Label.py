@@ -486,8 +486,8 @@ class Label(Panel, ColorMixin, tag='label'):
 		text glows in the theme's `accent` for a moment), `tint` (the same in `good` when the number rose and `bad` when
 		it fell), `roll` (an odometer: only the characters that changed roll, each in its own column), `pop` (the new
 		text springs in from a little smaller), `flip` (a split-flap board: the old text folds away, the new one folds
-		in) or `none` (the default). A time may follow, `slide 500ms`, or write `{style: fade, duration: 0.6s}`; the
-		default is 350ms (roll 600ms, flip 500ms, pop 450ms, tint 800ms) and the most 2s. The first value after loading
+		in), `wipe` (an edge sweeps left to right, revealing the new text and wiping the old), `typewriter` (the new characters appear one at a time) and `scramble` (changed digits and letters decode through random ones) or `none` (the default). A time may follow, `slide 500ms`, or write `{style: fade, duration: 0.6s}`; the
+		default is 350ms (roll 600ms, flip 500ms, pop 450ms, tint 800ms, wipe 500ms, typewriter 600ms, scramble 700ms) and the most 2s. The first value after loading
 		never animates. Cascades through `shared:` like any label property, so
 		`shared.display.valueLabel.change-animation: slide` sets it for every reading below a container.
 		`LEVITY_CHANGE_ANIMATION=0` in the environment turns every change animation off."""

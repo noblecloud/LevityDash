@@ -82,7 +82,7 @@ def change(dashboard, label, text):
 	settle(dashboard, 2)
 
 
-@pytest.mark.parametrize('style', ['fade', 'slide', 'flash', 'tint', 'roll', 'pop', 'flip'])
+@pytest.mark.parametrize('style', ['fade', 'slide', 'flash', 'tint', 'roll', 'pop', 'flip', 'wipe', 'typewriter', 'scramble'])
 def test_change_runs_and_ends_clean(dashboard, sandbox, style):
 	label = labelIn(sandbox, '71°', **{'change-animation': f'{style} 200ms'})
 	settle(dashboard)
@@ -202,3 +202,98 @@ def test_saves_what_was_written(dashboard, sandbox):
 	label = labelIn(sandbox, '71°', **{'change-animation': 'flash'})
 	settle(dashboard)
 	assert label.state.get('change-animation') == 'flash'
+
+
+@pytest.mark.parametrize('style', ['wipe', 'typewriter', 'scramble'])
+def test_reveal_styles_hide_then_restore_the_outline(dashboard, sandbox, style):
+	label = labelIn(sandbox, '1,071°', **{'change-animation': f'{style} 2s'})
+	settle(dashboard)
+	box = label.textBox
+	change(dashboard, label, '1,082°')
+	animator = box._changeAnimator
+	effect = animator.effect
+	assert effect.inner is None
+	assert len(box.childItems()) == 1
+	animator.animation.pause()
+	for t in (0.0, 0.3, 0.7, 1.0):
+		animator._frame(t)
+	animator.stop()
+	assert box.path().elementCount() == effect.full.elementCount() > 0
+	assert box.childItems() == []
+
+
+def test_wipe_edge_moves_left_to_right(dashboard, sandbox):
+	label = labelIn(sandbox, '71°', **{'change-animation': 'wipe 2s'})
+	settle(dashboard)
+	change(dashboard, label, '72°')
+	animator = label.textBox._changeAnimator
+	effect = animator.effect
+	animator.animation.pause()
+	animator._frame(0.2)
+	early = effect.fresh.rect().right()
+	animator._frame(0.8)
+	assert effect.fresh.rect().right() > early
+	assert effect.stale.rect().left() == pytest.approx(effect.fresh.rect().right())
+	animator.stop()
+
+
+def test_typewriter_shows_characters_in_order(dashboard, sandbox):
+	label = labelIn(sandbox, '1,071°', **{'change-animation': 'typewriter 2s'})
+	settle(dashboard)
+	change(dashboard, label, '1,082°')
+	animator = label.textBox._changeAnimator
+	effect = animator.effect
+	animator.animation.pause()
+	animator._frame(0.2)
+	shown =[letter.opacity() for letter in effect.letters]
+	assert shown == sorted(shown, reverse=True)
+	assert shown[0] == 1.0 and shown[-1] < 1.0
+	animator._frame(1.0)
+	assert all(letter.opacity() == 1.0 for letter in effect.letters)
+	assert effect.old.opacity() == 0.0
+	animator.stop()
+
+
+def test_typewriter_falls_back_to_a_wipe_without_glyphs(dashboard, sandbox, monkeypatch):
+	from LevityDash.lib.ui.frontends.PySide import valuechange
+	monkeypatch.setattr(valuechange, 'glyphs', lambda path: [])
+	label = labelIn(sandbox, '71°', **{'change-animation': 'typewriter 2s'})
+	settle(dashboard)
+	change(dashboard, label, '72°')
+	animator = label.textBox._changeAnimator
+	assert isinstance(animator.effect.inner, valuechange._Wipe)
+	animator.stop()
+	assert not label.textBox.path().isEmpty()
+	assert label.textBox.childItems() == []
+
+
+def test_scramble_changes_only_the_changed_characters(dashboard, sandbox):
+	from LevityDash.lib.ui.frontends.PySide.valuechange import glyphs
+	label = labelIn(sandbox, '1,071°', **{'change-animation': 'scramble 2s'})
+	settle(dashboard)
+	box = label.textBox
+	change(dashboard, label, '1,082°')
+	animator = box._changeAnimator
+	effect = animator.effect
+	assert len(effect.columns) == 2
+	animator.animation.pause()
+	animator._frame(0.1)
+	assert all(sum(f.isVisible() for f in faces) == 1 for _, _, faces, _ in effect.columns)
+	assert not any(final.isVisible() for _, final, _, _ in effect.columns)
+	animator._frame(1.0)
+	assert all(final.isVisible() for _, final, _, _ in effect.columns)
+	assert all(not f.isVisible() for _, _, faces, _ in effect.columns for f in faces)
+	animator.stop()
+	assert len(glyphs(box.path())) == 6
+
+
+def test_scramble_falls_back_to_fade(dashboard, sandbox, monkeypatch):
+	from LevityDash.lib.ui.frontends.PySide import valuechange
+	monkeypatch.setattr(valuechange, 'glyphs', lambda path: [])
+	label = labelIn(sandbox, '71°', **{'change-animation': 'scramble 2s'})
+	settle(dashboard)
+	change(dashboard, label, '72°')
+	animator = label.textBox._changeAnimator
+	assert isinstance(animator.effect.inner, valuechange._Fade)
+	animator.stop()
+	assert label.textBox.childItems() == []

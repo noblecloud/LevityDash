@@ -500,7 +500,7 @@ The column is as wide as the widest head plus the widest tail in it, and the tex
 
 Digits of one width (CSS `font-variant-numeric: tabular-nums`). Implied by `number-align`. The bundled Nunito, Roboto and Roboto Mono already set every digit to one width, so it only matters for a font that does not.
 
-#### <div class=mono>change-animation: none | fade | slide | flash | tint | roll | pop | flip </div>
+#### <div class=mono>change-animation: none | fade | slide | flash | tint | roll | pop | flip | wipe | typewriter | scramble </div>
 
 How the text moves when the value it shows changes. Off (`none`) unless a dashboard asks.
 
@@ -511,8 +511,11 @@ How the text moves when the value it shows changes. Off (`none`) unless a dashbo
 - `roll`: an odometer. Only the characters that changed move, each rolling in a column of its own, up when the number rose and down when it fell; `99` to `100` keeps the columns lined up from the right. A warped label slides instead.
 - `pop`: the new text springs in from a little smaller while the old one fades.
 - `flip`: a split-flap board. The old text folds away about its middle and the new one folds down into place.
+- `wipe`: an edge sweeps left to right; the new text shows behind it and the old text is wiped away by it.
+- `typewriter`: the new characters appear one at a time, left to right, each fading in; a long string is spread over the duration. Text it cannot split into characters wipes instead.
+- `scramble`: a decode. Each changed digit or letter shows random ones (digits for a digit, letters for a letter) that settle, left to right, into the new character; the unchanged ones stay put. Text it cannot split into characters fades instead.
 
-A time may follow the style (`slide 500ms`), or write `{style: fade, duration: 0.6s}`. The default is 350ms (roll 600ms, flip 500ms, pop 450ms, tint 800ms), the most 2s. The first value after a load never animates, nor does a change from or to the `-` placeholder. Set it for every reading in a container through `shared:`:
+A time may follow the style (`slide 500ms`), or write `{style: fade, duration: 0.6s}`. The default is 350ms (roll 600ms, flip 500ms, pop 450ms, tint 800ms, wipe 500ms, typewriter 600ms, scramble 700ms), the most 2s. The first value after a load never animates, nor does a change from or to the `-` placeholder. Set it for every reading in a container through `shared:`:
 
 ```yaml
 shared:
