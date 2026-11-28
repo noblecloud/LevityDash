@@ -500,7 +500,7 @@ The column is as wide as the widest head plus the widest tail in it, and the tex
 
 Digits of one width (CSS `font-variant-numeric: tabular-nums`). Implied by `number-align`. The bundled Nunito, Roboto and Roboto Mono already set every digit to one width, so it only matters for a font that does not.
 
-#### <div class=mono>change-animation: none | fade | slide | flash | tint | roll | pop | flip </div>
+#### <div class=mono>change-animation: none | fade | slide | flash | tint | roll | pop | flip | glow | shake | delta | blur </div>
 
 How the text moves when the value it shows changes. Off (`none`) unless a dashboard asks.
 
@@ -511,8 +511,12 @@ How the text moves when the value it shows changes. Off (`none`) unless a dashbo
 - `roll`: an odometer. Only the characters that changed move, each rolling in a column of its own, up when the number rose and down when it fell; `99` to `100` keeps the columns lined up from the right. A warped label slides instead.
 - `pop`: the new text springs in from a little smaller while the old one fades.
 - `flip`: a split-flap board. The old text folds away about its middle and the new one folds down into place.
+- `glow`: a soft halo in the theme's `accent` swells around the new text over the first third, then fades. Drawn as a few stroked copies of the outline behind the text, not a blur.
+- `shake`: the new text shows at once and shakes sideways a few times, shrinking, for an alert.
+- `delta`: the new text shows at once and a small badge with the difference (`+3`, `−0.4`, in the new text's decimal places) floats up from its top right corner and fades, in `good` when the number rose and `bad` when it fell. Text with no number tints instead.
+- `blur`: an Apple-style numeric swap. The old text fades out stretching a little, the new one fades in from a stretch and a little below and settles with the theme's `motion` curve; faint offset copies suggest motion blur.
 
-A time may follow the style (`slide 500ms`), or write `{style: fade, duration: 0.6s}`. The default is 350ms (roll 600ms, flip 500ms, pop 450ms, tint 800ms), the most 2s. The first value after a load never animates, nor does a change from or to the `-` placeholder. Set it for every reading in a container through `shared:`:
+A time may follow the style (`slide 500ms`), or write `{style: fade, duration: 0.6s}`. The default is 350ms (roll 600ms, flip 500ms, pop 450ms, tint 800ms, glow 900ms, shake 450ms, delta 1.2s, blur 400ms), the most 2s. The first value after a load never animates, nor does a change from or to the `-` placeholder. Set it for every reading in a container through `shared:`:
 
 ```yaml
 shared:

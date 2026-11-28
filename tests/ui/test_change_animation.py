@@ -82,7 +82,11 @@ def change(dashboard, label, text):
 	settle(dashboard, 2)
 
 
-@pytest.mark.parametrize('style', ['fade', 'slide', 'flash', 'tint', 'roll', 'pop', 'flip'])
+#: What each style adds to the item while it runs (the rest add one child).
+ADDED = {'glow': 3, 'shake': 0, 'blur': 5}
+
+
+@pytest.mark.parametrize('style', ['fade', 'slide', 'flash', 'tint', 'roll', 'pop', 'flip', 'glow', 'shake', 'delta', 'blur'])
 def test_change_runs_and_ends_clean(dashboard, sandbox, style):
 	label = labelIn(sandbox, '71°', **{'change-animation': f'{style} 200ms'})
 	settle(dashboard)
@@ -92,8 +96,8 @@ def test_change_runs_and_ends_clean(dashboard, sandbox, style):
 	change(dashboard, label, '72°')
 	animator = box._changeAnimator
 	assert animator is not None and animator.running
-	assert len(box.childItems()) == before + 1
-	if style == 'slide':
+	assert len(box.childItems()) == before + ADDED.get(style, 1)
+	if style in ('slide', 'shake', 'blur'):
 		assert box.transformations()
 	QTest.qWait(350)
 	dashboard.app.processEvents()
@@ -144,6 +148,68 @@ def test_tint_follows_direction(dashboard, sandbox):
 	assert label.textBox._changeAnimator.effect.glow.brush().color() == Color.role('bad').QColor
 	change(dashboard, label, '45')
 	assert label.textBox._changeAnimator.effect.glow.brush().color() == Color.role('good').QColor
+	label.textBox._changeAnimator.stop()
+
+
+@pytest.mark.parametrize('old, new, expected', [
+	('50', '53', '+3'), ('1.2°', '0.8°', '−0.4'), ('1,071°', '1,082°', '+11'), ('10.00', '10.25', '+0.25'),
+	('NW', 'N', None), ('5', '5.0', None), ('-', '4', None),
+])
+def test_delta_text(old, new, expected):
+	assert value_change.deltaText(old, new) == expected
+
+
+def test_delta_badge_follows_direction(dashboard, sandbox):
+	from LevityDash.lib.ui import Color
+	from LevityDash.lib.ui.frontends.PySide.valuechange import _Delta
+	label = labelIn(sandbox, '50.0', **{'change-animation': 'delta 2s'})
+	settle(dashboard)
+	change(dashboard, label, '49.6')
+	effect = label.textBox._changeAnimator.effect
+	assert isinstance(effect, _Delta) and effect.label == '−0.4'
+	assert effect.badge.brush().color() == Color.role('bad').QColor
+	change(dashboard, label, '52.1')
+	effect = label.textBox._changeAnimator.effect
+	assert effect.label == '+2.5'
+	assert effect.badge.brush().color() == Color.role('good').QColor
+	label.textBox._changeAnimator.stop()
+
+
+def test_delta_falls_back_to_tint_without_a_number(dashboard, sandbox):
+	from LevityDash.lib.ui.frontends.PySide.valuechange import _Delta, _Tint
+	label = labelIn(sandbox, 'NW', **{'change-animation': 'delta 2s'})
+	settle(dashboard)
+	change(dashboard, label, 'SE')
+	effect = label.textBox._changeAnimator.effect
+	assert isinstance(effect, _Tint) and not isinstance(effect, _Delta)
+	label.textBox._changeAnimator.stop()
+
+
+def test_shake_moves_sideways_and_settles(dashboard, sandbox):
+	label = labelIn(sandbox, '71°', **{'change-animation': 'shake 2s'})
+	settle(dashboard)
+	change(dashboard, label, '72°')
+	effect = label.textBox._changeAnimator.effect
+	effect.frame(0.1)
+	assert effect.shift.dx != 0
+	effect.frame(1.0)
+	assert abs(effect.shift.dx) < abs(effect.amplitude) * 0.1
+	label.textBox._changeAnimator.stop()
+
+
+def test_glow_is_behind_the_text_in_the_accent(dashboard, sandbox):
+	from LevityDash.lib.ui import Color
+	from PySide6.QtWidgets import QGraphicsItem
+	label = labelIn(sandbox, '71°', **{'change-animation': 'glow 2s'})
+	settle(dashboard)
+	change(dashboard, label, '72°')
+	effect = label.textBox._changeAnimator.effect
+	assert len(effect.layers) == 3
+	for layer, _ in effect.layers:
+		assert layer.flags() & QGraphicsItem.GraphicsItemFlag.ItemStacksBehindParent
+		assert layer.pen().color() == Color.role('accent').QColor
+	effect.frame(0.34)
+	assert effect.layers[0][0].opacity() > 0
 	label.textBox._changeAnimator.stop()
 
 

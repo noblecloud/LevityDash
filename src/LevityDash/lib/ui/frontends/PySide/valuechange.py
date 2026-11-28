@@ -14,16 +14,17 @@ the old outline (kept with the transform it was shown with) into the item's new 
 """
 from __future__ import annotations
 
+import math
 import os
 from typing import NamedTuple, Optional
 
 from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QVariantAnimation
-from PySide6.QtGui import QBrush, QColor, QPainterPath, QPen, QTransform, QVector3D, Qt
+from PySide6.QtGui import QBrush, QColor, QFont, QPainterPath, QPen, QTransform, QVector3D, Qt
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsPathItem, QGraphicsRectItem, QGraphicsRotation, QGraphicsTransform
 from shiboken6 import isValid
 
 from LevityDash.lib.ui import Color
-from LevityDash.lib.ui.value_change import ChangeSpec, direction
+from LevityDash.lib.ui.value_change import ChangeSpec, deltaText, direction
 
 __all__ = ('ChangeAnimator', 'Before', 'enabled', 'glyphs')
 
@@ -408,6 +409,178 @@ class _Roll(_Effect):
 			item.setPath(self.full)
 
 
+class _ShiftX(QGraphicsTransform):
+	"""A horizontal offset in the parent's pixels, applied after the item's own transform."""
+
+	def __init__(self):
+		super().__init__()
+		self.dx = 0.0
+
+	def applyTo(self, matrix):
+		matrix.translate(self.dx, 0)
+
+	def setOffset(self, dx: float):
+		if dx != self.dx:
+			self.dx = dx
+			self.update()
+
+
+class _Stretch(QGraphicsTransform):
+	"""A vertical scale about a point, then a vertical offset, in the parent's pixels."""
+
+	def __init__(self, centre: QPointF):
+		super().__init__()
+		self.centre = centre
+		self.sy, self.dy = 1.0, 0.0
+
+	def applyTo(self, matrix):
+		matrix.translate(0, self.dy)
+		matrix.translate(self.centre.x(), self.centre.y(), 0)
+		matrix.scale(1, self.sy, 1)
+		matrix.translate(-self.centre.x(), -self.centre.y(), 0)
+
+	def set(self, sy: float, dy: float):
+		if sy != self.sy or dy != self.dy:
+			self.sy, self.dy = sy, dy
+			self.update()
+
+	def transform(self, sy: float = None, dy: float = None) -> QTransform:
+		"""The same map as a `QTransform` (the item's own, or the given scale and offset)."""
+		t = QTransform()
+		t.translate(0, self.dy if dy is None else dy)
+		t.translate(self.centre.x(), self.centre.y())
+		t.scale(1, self.sy if sy is None else sy)
+		t.translate(-self.centre.x(), -self.centre.y())
+		return t
+
+
+#: `glow`: halo layers as (stroke width, opacity at the peak), the width as a share of the text's height. The widest
+#: is faintest and swells last, so the halo seems to spread.
+GLOW_LAYERS = ((0.09, 0.30), (0.17, 0.18), (0.27, 0.10))
+#: `shake`: swings and how far, as a share of the text's height.
+SHAKE_SWINGS, SHAKE_AMPLITUDE = 3.5, 0.04
+#: `delta`: the badge's digit height as a share of the text's, and how far it floats, as a share of its own height.
+DELTA_SCALE, DELTA_RISE = 0.4, 0.9
+#: `blur`: the stretch the text starts or ends at, how far the new text starts below its place (share of height),
+#: and the spacing of the faint copies.
+BLUR_STRETCH, BLUR_RISE, BLUR_STEP = 0.15, 0.1, 0.05
+
+
+class _Glow(_Effect):
+	"""A halo of stacked wide strokes of the new outline behind the text; no graphics effect."""
+
+	def begin(self):
+		item = self.item
+		scale = abs(item.transform().m11()) or 1.0
+		height = item.path().boundingRect().height() * abs(item.transform().m22() or 1.0)
+		colour = Color.role('accent').QColor
+		self.layers = []
+		for width, peak in GLOW_LAYERS:
+			pen = QPen(colour, max(2.0, width * height) / scale)
+			pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+			pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+			layer = self.ghost(path=item.path(), brush=QBrush(Qt.BrushStyle.NoBrush), pen=pen, ownOpacity=False)
+			layer.setFlag(QGraphicsItem.GraphicsItemFlag.ItemStacksBehindParent, True)
+			self.layers.append((layer, peak))
+
+	def frame(self, t):
+		for index, (layer, peak) in enumerate(self.layers):
+			local = _clamp((t - 0.06 * index) / (1.0 - 0.06 * index))
+			# swell over the first third, fade over the rest
+			level = _smooth(local / 0.34) if local < 0.34 else (1.0 - _smooth((local - 0.34) / 0.66))
+			layer.setOpacity(peak * level)
+
+
+class _Shake(_Effect):
+	"""The new text shows at once and shakes sideways, a damped sine."""
+
+	def begin(self):
+		self.shift = _ShiftX()
+		self.item.setTransformations([self.shift])
+		self.amplitude = self.item.path().boundingRect().height() * abs(self.item.transform().m22() or 1.0) * SHAKE_AMPLITUDE
+
+	def frame(self, t):
+		self.shift.setOffset(self.amplitude * math.exp(-3.0 * t) * math.sin(2 * math.pi * SHAKE_SWINGS * t))
+
+
+class _Delta(_Effect):
+	"""A small badge with the difference floats up from the text's top right corner and fades."""
+
+	def begin(self):
+		item = self.item
+		self.label = deltaText(self.before.text, self.text)
+		token = 'good' if direction(self.before.text, self.text) > 0 else 'bad'
+		font = QFont(item.font())
+		reference = QPainterPath()
+		reference.addText(0, 0, font, '0')
+		ink = item.path().boundingRect()
+		path = QPainterPath()
+		path.addText(0, 0, font, self.label)
+		scale = DELTA_SCALE * ink.height() / (reference.boundingRect().height() or 1.0)
+		path = QTransform.fromScale(scale, scale).map(path)
+		rect = path.boundingRect()
+		gap = rect.height() * 0.25
+		# the badge's right edge on the text's, its bottom just above the text's top
+		path.translate(ink.right() - rect.right(), ink.top() - gap - rect.bottom())
+		self.rise = rect.height() * DELTA_RISE
+		badge = _child(item, path, QBrush(Color.role(token).QColor), QPen(Qt.PenStyle.NoPen))
+		badge.setZValue(1)
+		self.children.append(badge)
+		self.badge = badge
+
+	def frame(self, t):
+		self.badge.setPos(0, -self.rise * (1.0 - (1.0 - t) ** 2))
+		self.badge.setOpacity(min(1.0, t / 0.15) * (1.0 - _smooth(_clamp((t - 0.55) / 0.45))))
+
+
+class _Blur(_Effect):
+	"""A numeric-text swap: the old text fades out stretching, the new one fades in from a stretch and settles
+	upward. Faint offset copies (two a text) stand in for motion blur while it moves fastest."""
+
+	def begin(self):
+		item, before = self.item, self.before
+		self.curve = _motionCurve()
+		self.tr = _Stretch(self.centre())
+		item.setTransformations([self.tr])
+		height = item.path().boundingRect().height() * abs(item.transform().m22() or 1.0)
+		self.height, self.step = height, height * BLUR_STEP
+		self.old = self.ghost()
+		self.oldCopies = [self.ghost() for _ in (0, 1)]
+		self.newCopies = []
+		for _ in (0, 1):
+			copy = _child(item, item.path(), item.brush(), item.pen())
+			self.children.append(copy)
+			self.newCopies.append(copy)
+
+	def frame(self, t):
+		item, before = self.item, self.before
+		p = self.curve.valueForProgress(t)
+		sy, dy = 1.0 + BLUR_STRETCH * (1.0 - p), self.height * BLUR_RISE * (1.0 - p)
+		self.tr.set(sy, dy)
+		item.setOpacity(self.opacity * _smooth(_clamp((t - 0.1) / 0.6)))
+		oldOpacity = self.opacity * (1.0 - _smooth(_clamp(t / 0.6)))
+		self.old.setOpacity(oldOpacity)
+		inverse, ok = item.transform().inverted()
+		inverse = inverse if ok else QTransform()
+		undo, _ = self.tr.transform().inverted()
+		stretched = QTransform()
+		stretched.translate(self.tr.centre.x(), self.tr.centre.y())
+		stretched.scale(1, 1.0 + BLUR_STRETCH * _smooth(t))
+		stretched.translate(-self.tr.centre.x(), -self.tr.centre.y())
+		base = before.transform * stretched
+		self.old.setTransform(base * undo * inverse)
+		# motion blur: the old text smears while it leaves (first 40%), the new one trails while it arrives
+		leaving = _clamp(1.0 - t / 0.4)
+		for copy, k in zip(self.oldCopies, (-1, 1)):
+			copy.setOpacity(oldOpacity * 0.3 * leaving)
+			copy.setTransform(base * QTransform.fromTranslate(0, k * self.step) * undo * inverse)
+		arriving = _clamp(1.0 - p / 0.6)
+		local = self.step / (abs(item.transform().m22()) or 1.0)
+		for copy, k in zip(self.newCopies, (1, 2)):
+			copy.setOpacity(0.3 * arriving)
+			copy.setPos(0, k * local)
+
+
 EFFECTS = {
 	'fade': _Fade,
 	'slide': _Slide,
@@ -416,6 +589,10 @@ EFFECTS = {
 	'pop': _Pop,
 	'flip': _Flip,
 	'roll': _Roll,
+	'glow': _Glow,
+	'shake': _Shake,
+	'delta': _Delta,
+	'blur': _Blur,
 }
 
 
@@ -449,6 +626,8 @@ class ChangeAnimator:
 		style = spec.style
 		if style == 'roll' and getattr(item, '_warpActive', False):
 			style = 'slide'
+		if style == 'delta' and deltaText(before.text, text) is None:
+			style = 'tint'
 		effect = EFFECTS[style](item, before, text, spec)
 		effect.begin()
 		self.effect = effect
