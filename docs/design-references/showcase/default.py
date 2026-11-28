@@ -310,8 +310,8 @@ def board(rooms=INDOOR):
 		bar('astronomy.sun.remaining', g(x, 21.2, 18, 2.2), 0, 960, track={'weight': '100%', 'color': '$rule', 'segments': 16, 'gap': '18%'},
 		    fill={'gradient': {0: '$accent', 1: '$warn'}, 'segments': 16, 'gap': '18%', 'weight': '100%', 'glow': GLOW}),
 		*tile('SUNRISE', f'{L}.sunrise', x + 19.8, 2.8, 9.6, '$warn', fmt='%-I:%M', hint='0:00', right=True),
-		text('x', g(x + 21.0, 2.8 + CAP + 0.4, 2.6, TILE), color='$warn', align='CenterRight', icon='wi:sunrise'),
-		text('x', g(x + 21.0, 10.4 + CAP + 0.4, 2.6, TILE), color='$accent', align='CenterRight', icon='wi:sunset'),
+		text('x', g(x + 21.0, 2.8 + CAP + 0.4, 2.6, TILE), color='$warn', align='CenterRight', icon='mdi:weather-sunset-up'),
+		text('x', g(x + 21.0, 10.4 + CAP + 0.4, 2.6, TILE), color='$accent', align='CenterRight', icon='mdi:weather-sunset-down'),
 		*tile('SUNSET', f'{L}.sunset', x + 19.8, 10.4, 9.6, '$accent', fmt='%-I:%M', hint='0:00', right=True),
 		*tile('SUN · W/M²', f'{L}.irradiance.irradiance', x + 19.8, 18.0, 9.6, '$warn', hint='000', right=True),
 	]

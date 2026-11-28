@@ -180,3 +180,14 @@ def test_forecast_times_are_read_in_the_zone_the_request_named(monkeypatch):
 	finally:
 		monkeypatch.undo()
 		time.tzset()
+
+
+def test_daily_radiation_sum_gets_a_unit():
+	# `MJ/m^2` was missing from the unit table, so the key never held a usable value
+	# and a reading of it printed the empty-value placeholder.
+	from LevityDash.lib.plugins.categories import CategoryItem
+	schema = make_schema()
+	item = schema[CategoryItem('environment.light.irradiance.daily')]
+	value = item.getConvertFunc(None)(15.2)
+	assert float(value) == 15.2
+	assert 'MJ' in str(value)
