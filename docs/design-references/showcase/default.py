@@ -486,7 +486,7 @@ def board(rooms=INDOOR):
 			{'type': 'polar', 'name': 'radar', 'plot': 'radar', 'prefix': 'aircraft', 'slots': 15, 'max': 30, 'labels': 4, 'sweep': True,
 			 'rings': 3, 'accent': '$info', 'gradient': [{'at': 0, 'color': '$bad'}, {'at': 8000, 'color': '$warn'}, {'at': 40000, 'color': '$info'}],
 			 'geometry': body},
-			*six(x, [('FLIGHT', 'aircraft.1.callsign', '$text', {'hint': 'AAL000', 'group': 'global.callsign'}),
+			*six(x, [('FLIGHT', 'aircraft.1.callsign', '$text', {'hint': 'AAL0000', 'group': 'global.callsign'}),
 			         ('NM', 'aircraft.1.distance', '$info', {'precision': 1, 'hint': '00.0'}),
 			         ('FT', 'aircraft.1.altitude', '$warn', {'hint': '00000'})], start=3)], fill=None, when='aircraft.active') | {'geometry': g(0, 0, 100, 100)},
 		nest('dayClock', whole, [

@@ -48,7 +48,7 @@ def test_slots_fill_nearest_first_and_blank_the_ones_that_emptied():
 	assert 'aircraft.3.callsign' not in out
 	gone = slotValues(rows[:1], slots=3, previous=2)
 	assert gone['aircraft.2.callsign'] == '' and gone['aircraft.2.distance'] == 0
-	assert 'aircraft.3.callsign' not in gone
+	assert 'aircraft.3.callsign' not in gone and gone['aircraft.2.path'] == ''
 	assert slotValues(rows * 30, slots=99)['aircraft.count'] == 60 and f'aircraft.{SLOTS_MAX + 1}.callsign' not in slotValues(rows * 30, slots=99)
 
 

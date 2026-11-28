@@ -723,7 +723,7 @@ class Polar(Panel, tag='polar'):
 			name = values.get(('callsign', n))
 			distance = values.get(('distance', n))
 			bearing = values.get(('bearing', n))
-			if distance is None or bearing is None or (count is not None and n > count) or name == '':
+			if distance is None or bearing is None or distance <= 0 or (count is not None and n > count) or name == '':
 				continue
 			blips.append(radar.Blip(
 				name or '?', bearing, distance, values.get(('altitude', n), 0.0),

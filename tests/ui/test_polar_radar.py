@@ -275,3 +275,12 @@ def test_the_radar_reads_its_trails_out_of_the_published_paths():
 	assert Polar.radarPaths(panel) == [[(30.0, 10.0, 4.0), (0.0, 20.0, 3.0)]]
 	panel._radarValues.clear()
 	assert Polar.radarPaths(panel) == []
+
+
+def test_a_blanked_slot_is_not_a_blip():
+	"""A slot the plugin has blanked (distance 0) stays off the scope even if its old callsign is still there."""
+	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.polar.item import Polar
+	polar = Polar.__new__(Polar)
+	polar._slots = 2
+	polar._radarValues = {('count', None): 1, ('callsign', 1): 'AAL1', ('distance', 1): 0, ('bearing', 1): 0}
+	assert polar._blips() == []
