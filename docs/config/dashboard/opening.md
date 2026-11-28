@@ -99,7 +99,7 @@ shows, the monitor it goes on and where. It lives in `<config>/workspaces/<name>
 
 ```yaml
 name: desk                 # optional, defaults to the file's stem
-theme: dusk                # optional: the one theme the whole layout uses
+theme: dusk                # optional: force this theme on every window; without it each window follows its dashboard
 windows:
   - id: main               # stable, unique in the file; it is the window's control socket id
     dashboard: home.levity # <config>/saves/dashboards, then the current directory, or absolute
@@ -159,9 +159,10 @@ three seconds for them; a window that does not answer is left running and named 
 
 ### Theme
 
-A layout has one theme, never one per window and never one per focus. `theme:` in the file wins; without one,
-the first window's dashboard theme wins. A window whose dashboard names a different theme logs one line —
-`paper theme ignored: the workspace uses dusk` — and uses the layout's.
+A window never changes theme on focus. `theme:` in the file is forced on every window; a window whose dashboard
+names a different theme logs one line — `paper theme ignored: the workspace uses dusk` — and uses the layout's.
+Without `theme:` in the file, each window uses the theme its own dashboard names, so a board written for its own
+theme (one that uses a token only that theme defines) renders correctly beside the others.
 
 ### Asking who is there
 

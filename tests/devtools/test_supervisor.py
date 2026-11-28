@@ -195,3 +195,44 @@ def test_a_limit_of_zero_never_rolls(tmp_path):
 		log.write('y' * 100 + '\n')
 	log.close()
 	assert [p.name for p in tmp_path.iterdir()] == ['x.out']
+
+
+def test_start_reaps_a_group_left_behind_by_a_dead_parent(tmp_path):
+	"""A crashed main window can leave its second window running: a restart must not open a duplicate."""
+	import os
+	import signal
+	import time
+
+	if not hasattr(os, 'killpg'):
+		return
+	pidfile = tmp_path / 'orphan.pid'
+	script = tmp_path / 'parent.py'
+	script.write_text(
+		"import os, subprocess, sys\n"
+		f"p = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(600)'])\n"
+		f"open({str(pidfile)!r}, 'w').write(str(p.pid))\n"
+		"os._exit(1)\n"
+	)
+	child = Child('child', [sys.executable, str(script)], tmp_path)
+
+	async def scenario():
+		await child.start()
+		for _ in range(100):
+			if pidfile.exists() and pidfile.read_text():
+				break
+			await asyncio.sleep(0.05)
+		orphan = int(pidfile.read_text())
+		os.kill(orphan, 0)  # the grandchild outlived its parent
+		await child.start()  # the restart
+		for _ in range(100):
+			try:
+				os.kill(orphan, 0)
+			except ProcessLookupError:
+				break
+			await asyncio.sleep(0.05)
+		else:
+			os.kill(orphan, signal.SIGKILL)
+			raise AssertionError('the orphaned window was not reaped')
+		await child.stop(timeout=10)
+
+	asyncio.run(scenario())

@@ -181,6 +181,10 @@ class Child:
 		self.logMaxBytes = logMaxBytes
 		self.logBackups = logBackups
 		self._pump: Optional[asyncio.Task] = None
+		#: The process group this child leads. The frontend of a workspace starts one process per extra window; they
+		#: belong to the same group, so a crash of the first window can be cleaned up as a unit instead of leaving the
+		#: others running to be duplicated by the restart.
+		self.pgid: Optional[int] = None
 
 	@property
 	def is_alive(self) -> bool:
@@ -191,14 +195,18 @@ class Child:
 		return self.proc.pid if self.is_alive else None
 
 	async def start(self) -> None:
+		# Anything left over from the last run (a workspace's other windows) goes before a new run starts.
+		await self.reapGroup()
+		group = {'start_new_session': True} if os.name == 'posix' else {}
 		if self.logPath is None:
-			self.proc = await asyncio.create_subprocess_exec(*self.argv, cwd=str(self.cwd), env=self.env)
+			self.proc = await asyncio.create_subprocess_exec(*self.argv, cwd=str(self.cwd), env=self.env, **group)
 		else:
 			self.proc = await asyncio.create_subprocess_exec(
 				*self.argv, cwd=str(self.cwd), env=self.env,
-				stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+				stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, **group,
 			)
 			self._pump = asyncio.create_task(self._pumpOutput(self.proc))
+		self.pgid = self.proc.pid if group else None
 		self.started_at = time.monotonic()
 		print(f'[run] {self.name} started (pid={self.proc.pid})'
 		      + (f' -> {self.logPath}' if self.logPath else ''))
@@ -229,8 +237,42 @@ class Child:
 		finally:
 			log.close()
 
+	def _groupAlive(self) -> bool:
+		if self.pgid is None:
+			return False
+		try:
+			os.killpg(self.pgid, 0)
+		except (ProcessLookupError, PermissionError):
+			return False
+		return True
+
+	async def reapGroup(self, grace: float = 3.0) -> None:
+		"""End whatever is still running in this child's process group.
+
+		A workspace's extra windows are processes of their own that the first window started. When that first
+		window dies they are orphaned, and restarting it would open a second copy of each. The group is asked to
+		stop, then killed after `grace` seconds.
+		"""
+		if not self._groupAlive():
+			return
+		print(f'[run] {self.name}: ending leftover processes of its group')
+		try:
+			os.killpg(self.pgid, signal.SIGTERM)
+		except ProcessLookupError:
+			return
+		deadline = time.monotonic() + grace
+		while self._groupAlive() and time.monotonic() < deadline:
+			await asyncio.sleep(0.1)
+		if self._groupAlive():
+			try:
+				os.killpg(self.pgid, signal.SIGKILL)
+			except ProcessLookupError:
+				pass
+		self.pgid = None
+
 	async def stop(self, timeout: float = 10.0) -> None:
 		if not self.is_alive:
+			await self.reapGroup()
 			return
 		# The backend's SIGTERM handler needs ~500ms to notice plus a further
 		# teardown budget for plugins and the wire server; the frontend has to
@@ -242,6 +284,8 @@ class Child:
 			print(f'[run] {self.name} ignored SIGTERM after {timeout:.0f}s - killing')
 			self.proc.kill()
 			await self.proc.wait()
+		# The first window asks its own children to close on the way out; this takes what did not.
+		await self.reapGroup()
 
 	async def restart(self) -> None:
 		await self.stop()

@@ -556,3 +556,23 @@ def test_a_window_that_agrees_with_the_layout_says_nothing(tmp_path, capsys):
 		theme.set_override(None)
 
 	assert 'theme ignored' not in capsys.readouterr().err
+
+
+def test_without_a_workspace_theme_each_window_keeps_its_own(tmp_path):
+	from LevityDash.lib.ui.colors import theme
+
+	path = tmp_path / 'desk.yaml'
+	path.write_text(DESK)
+	first = tmp_path / 'home.levity'
+	first.write_text('theme: paper\nitems: []\n')
+	active = workspace.load(path)
+	active.windows[0].dashboard = str(first)
+	workspace.setActive(active)
+	workspace.setLaunch(workspace.Launch.fromWindow(active.windows[0]))
+	workspace.setTheme(None)
+
+	try:
+		workspace.applyTheme()
+		assert theme.override() is None
+	finally:
+		theme.set_override(None)
