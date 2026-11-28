@@ -89,16 +89,18 @@ done
 
 # ─── Rename handling ─────────────────────────────────────────────────────────
 # The library checkout used to be called WeatherUnits. LevityDash's pyproject now
-# path-depends on ../unitcorn, so a checkout under the old name would not resolve.
+# path-depends on ../unitcorn, so a checkout under the old name would not resolve;
+# both sides are renamed in place on the first deploy.
 check_local_rename() {
-  if [ ! -d "${LOCAL_UC}" ] && [ -d "${LOCAL_UC%/*}/WeatherUnits" ]; then
-    echo "✗ ${LOCAL_UC} not found, but ${LOCAL_UC%/*}/WeatherUnits is."
-    echo "  The checkout was renamed: mv ${LOCAL_UC%/*}/WeatherUnits ${LOCAL_UC}"
-    exit 1
+  local old="${LOCAL_UC%/*}/WeatherUnits"
+  if [ ! -d "${LOCAL_UC}" ] && [ -d "${old}" ]; then
+    mv "${old}" "${LOCAL_UC}"
+    echo "  → renamed ${old} to ${LOCAL_UC}"
+    echo "  → run 'poetry install' in ${LOCAL_LEVITY} to relink the local env to ../unitcorn"
   fi
 }
 
-# One-time move of the old checkout on lambda, keeping its .venv (poetry install relinks it).
+# Same one-time move on lambda, keeping its .venv (poetry install relinks it).
 migrate_remote() {
   ssh "${REMOTE_HOST}" "cd ${REMOTE_CODE_DIR} && if [ ! -d unitcorn ] && [ -d WeatherUnits ]; then mv WeatherUnits unitcorn && echo '  → renamed ${REMOTE_CODE_DIR}/WeatherUnits to unitcorn'; fi"
 }
