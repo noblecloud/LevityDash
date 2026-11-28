@@ -25,6 +25,10 @@ One word per idea, in docs, UI strings and new code. The class `Panel`, `Central
 - **When you're done: push your branch and stop there.** `git push origin <branch-name>` — this lands the branch in the maintainer's local repo without touching their checked-out `dev` (pushing to whatever branch they currently have checked out is refused by git itself, by design; pushing any other branch name always works). **Never merge into `dev` yourself, under any circumstances, even locally.** The maintainer (or Claude, when asked) reviews your branch with `git log`/`git diff` and merges it into `dev` themselves — that review step is the entire point of this setup.
 - **Stay inside the task's stated scope.** Several task briefs explicitly call out what NOT to touch (usually because that code is tracked separately, or because it's mid-refactor elsewhere). Respect those boundaries even if you notice something else that looks wrong nearby — flag it instead of fixing it.
 
+## Config
+
+Config is TOML: `config.toml`, `plugins/plugins.toml`, `plugins/<Plugin>.toml` (`lib/configfile.py` reads, writes and migrates them). `LevityConfig` is still a `ConfigParser` in memory, so `getOrSet`, `getboolean` and `userConfig['Section']['key']` work as before. An older `.ini` is converted on first start and kept as `.ini.bak`. Never write `.ini` in new code or docs.
+
 ## Commands
 
 ```sh
@@ -60,7 +64,7 @@ src/
                                see "Schema engine" below, or docs/reviews/schema-pipeline.md
     lib/plugins/builtin/       OpenMeteo, PirateWeather, WeatherFlow, Govee (BLE),
                                OpenWeatherMap, Host (psutil vitals + top
-                               processes; off until Host.ini enables it)
+                               processes; off until Host.toml enables it)
     lib/wire/                  backend/frontend split wire protocol — see "Wire
                                protocol" below
     lib/ui/frontends/PySide/   the Qt frontend (app.py, Modules/Displays/…)

@@ -1,6 +1,8 @@
 import os
 import platform
 import re
+import tomllib
+from textwrap import dedent
 from configparser import ConfigParser, ExtendedInterpolation, ParsingError
 from datetime import timedelta
 from functools import cached_property
@@ -8,7 +10,7 @@ from io import StringIO
 from logging import getLogger, Logger
 from pathlib import Path, PosixPath, PurePath
 from re import search
-from shutil import copytree
+from shutil import copy2, copytree
 from typing import Callable, ClassVar, Optional, Text, Union
 
 from pytz import timezone
@@ -16,6 +18,7 @@ from rich import prompt
 
 from . import LevityDashboard
 from .EasyPath import EasyPath, EasyPathFile
+from .configfile import dumpToml, fromToml, migrateConfigDir, readToml
 from ._descriptors import classproperty
 
 _backupLogger = getLogger('LevityConfig')
@@ -86,8 +89,22 @@ class LevityConfig(ConfigParser):
 
 		self.userPath = userPath
 
+		# An INI file from before the move to TOML becomes a .toml (the old one kept as a .bak) on first run.
+		migrateConfigDir(userPath)
+
 		if path is not None:
+			# A config folder missing the file (a folder from an older release, or one that was tidied) gets the shipped one.
+			shipped = LevityDashboard.paths.resources / 'example-config' / str(path)
+			wanted = userPath / str(path)
+			if not Path(str(path)).is_absolute() and shipped.is_file() and not wanted.exists() and not wanted.with_suffix('.ini').exists():
+				copy2(shipped, wanted)
 			self.path = self.userPath[path]
+			if self.path.path.suffix == '.toml' and not self.path.path.exists():
+				# Not migrated (read-only folder, unreadable file): keep working from the INI.
+				legacy = self.path.path.with_suffix('.ini')
+				if legacy.is_file():
+					self.log.warning(f'Reading {legacy.name}; it could not be moved to {self.path.path.name}')
+					self.path = self.userPath[str(legacy)]
 			self.read(self.path.path)
 
 		self._check_on_boardings()
@@ -232,8 +249,52 @@ class LevityConfig(ConfigParser):
 	def rootPath(self) -> EasyPath:
 		return EasyPath(LevityDashboard.paths.config)
 
+	def read(self, filenames, encoding=None):
+		"""Reads a file: TOML for a `.toml`, anything else as INI (the pre-TOML format)."""
+		if isinstance(filenames, (str, bytes, os.PathLike)):
+			filenames = [filenames]
+		done = []
+		for filename in filenames:
+			if Path(filename).suffix.lower() != '.toml':
+				done += super().read(filename, encoding)
+				continue
+			try:
+				data = readToml(filename)
+			except OSError:
+				continue
+			self._load(data)
+			done.append(filename)
+		return done
+
+	def _load(self, data: dict[str, dict[str, str]]) -> None:
+		for name, values in data.items():
+			if name == self.default_section:
+				target = self._defaults
+			else:
+				if name not in self._sections:
+					self.add_section(name)
+				target = self._sections[name]
+			for key, value in values.items():
+				target[self.optionxform(key)] = value  # raw, as an INI read does: `$` is not checked
+
+	@property
+	def _asIni(self) -> bool:
+		path = getattr(self, 'path', None)
+		path = getattr(path, 'path', path)
+		return path is not None and Path(path).suffix.lower() == '.ini'
+
+	def write(self, fp, *args, **kwargs):
+		"""Writes TOML, or INI when this config was loaded from an INI file it could not move."""
+		if self._asIni:
+			return super().write(fp, *args, **kwargs)
+		sections = []
+		if self._defaults:
+			sections.append((self.default_section, self._defaults))
+		sections.extend(self._sections.items())
+		fp.write(dumpToml(sections))
+
 	def save(self):
-		with self.path.path.open('w') as f:
+		with self.path.path.open('w', encoding='utf-8') as f:
 			self.write(f)
 
 	@property
@@ -370,7 +431,7 @@ class LevityConfig(ConfigParser):
 
 
 class PluginsConfig(LevityConfig):
-	fileName: str = 'plugins/plugins.ini'
+	fileName: str = 'plugins/plugins.toml'
 
 	@property
 	def enabledPlugins(self):
@@ -395,10 +456,16 @@ class PluginsConfig(LevityConfig):
 		configsDir = self.userPath['plugins'].asDict(depth=3)
 		result = {}
 		for name, pluginDir in configsDir.items():
-			if '.ini' in name and name != 'plugins.ini':
-				result[name.strip('.ini')] = LevityConfig(path=pluginDir.path)
-			elif isinstance(pluginDir, dict) and 'config.ini' in pluginDir.keys():
-				result[name] = LevityConfig(path=pluginDir['config.ini'].path)
+			if name.endswith(('.toml', '.ini')) and name not in ('plugins.toml', 'plugins.ini'):
+				stem = name.rsplit('.', 1)[0]
+				if name.endswith('.ini') and f'{stem}.toml' in configsDir:
+					continue
+				result[stem] = LevityConfig(path=pluginDir.path)
+			elif isinstance(pluginDir, dict):
+				for fileName in ('config.toml', 'config.ini'):
+					if fileName in pluginDir.keys():
+						result[name] = LevityConfig(path=pluginDir[fileName].path)
+						break
 
 		return result
 
@@ -430,10 +497,17 @@ class PluginConfig(LevityConfig):
 
 	@classmethod
 	def readString(cls, string: Text, **context):
+		"""A config from text: TOML, or the older INI text a plugin outside this repo may still ship."""
 		path = context.pop('path', None)
 		config = cls(**context)
 		config.path = path
-		config.read_file(StringIO(string))
+		text = dedent(string)
+		try:
+			data = fromToml(tomllib.loads(text))
+		except tomllib.TOMLDecodeError:
+			config.read_file(StringIO(text))
+		else:
+			config._load(data)
 
 		if config.path is not None:
 			config._check_on_boardings()
@@ -549,7 +623,7 @@ class PluginConfig(LevityConfig):
 
 
 class Config(LevityConfig):
-	fileName: str = 'config.ini'
+	fileName: str = 'config.toml'
 
 	@cached_property
 	def plugins(self):

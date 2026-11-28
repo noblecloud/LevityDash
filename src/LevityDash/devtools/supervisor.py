@@ -29,6 +29,7 @@ starts, watches and reaps them.
 import argparse
 import asyncio
 import configparser
+import tomllib
 import os
 import signal
 import sys
@@ -78,12 +79,16 @@ def readBackendConfig() -> Dict[str, str]:
 	try:
 		from appdirs import AppDirs
 		configDir = Path(AppDirs(appname='LevityDash', appauthor='LevityDash.app').user_config_dir)
-		parser = configparser.ConfigParser()
-		parser.read(configDir / 'config.ini')
-		if parser.has_section('Backend'):
-			for key in ('mode', 'host', 'port'):
-				if parser.has_option('Backend', key):
-					found[key] = parser.get('Backend', key)
+		if (configDir / 'config.toml').is_file():
+			with open(configDir / 'config.toml', 'rb') as file:
+				backend = tomllib.load(file).get('Backend', {})
+		else:  # a config from before TOML that has not been opened since
+			parser = configparser.ConfigParser()
+			parser.read(configDir / 'config.ini')
+			backend = dict(parser['Backend']) if parser.has_section('Backend') else {}
+		for key in ('mode', 'host', 'port'):
+			if key in backend:
+				found[key] = str(backend[key])
 	except Exception as e:  # noqa: BLE001 - a missing/damaged config must not stop the launcher
 		print(f'[run] could not read config ({e}); assuming mode=remote on {found["host"]}:{found["port"]}')
 	# An explicit environment override outranks the file, as it does in the app.

@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from json import dumps, loads
@@ -370,17 +371,17 @@ _enableMessage = ("Enable WeatherFlow?  "
                   "This will require an authentication token and a Tempest Weather station to connect.  "
                   "You can find more information at https://levitydash.app/#/plugin_config?id=weatherflowtempest")
 
-_defaultConfig = f""";All independent configs must have a plugin section
+_defaultConfig = f"""# All independent configs must have a plugin section
 
 [plugin]
-enabled = @ask(bool:False).message({_enableMessage})
-token = @ask(str:).message(Enter Token)
-stationID = @ask(str:).message(Enter Station ID)
-deviceID = @ask(str:).message(Enter Device ID)
-socketUpdates = @ask(bool:True).message(Enable Socket Updates?)
-socketType = @askChoose(str:websocket,udp).message(Select a socket type)
-fetchHistory = @ask(bool:False).message(Enable History Fetching?)
-defaultFor = temperature wind pressure humidity light lightning
+enabled = {json.dumps(f"@ask(bool:False).message({_enableMessage})")}
+token = "@ask(str:).message(Enter Token)"
+stationID = "@ask(str:).message(Enter Station ID)"
+deviceID = "@ask(str:).message(Enter Device ID)"
+socketUpdates = "@ask(bool:True).message(Enable Socket Updates?)"
+socketType = "@askChoose(str:websocket,udp).message(Select a socket type)"
+fetchHistory = "@ask(bool:False).message(Enable History Fetching?)"
+defaultFor = "temperature wind pressure humidity light lightning"
 """
 
 

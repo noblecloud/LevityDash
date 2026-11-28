@@ -19,10 +19,10 @@ Slot 1 is the nearest. A panel binds to a slot and never to an aircraft, so the 
 as with the Host plugin's process table. A slot nobody fills has an empty callsign, which is how a display tells
 an empty slot from a plane on the same bearing as the last. ``plot: radar`` of ``type: polar`` reads these.
 
-**It is off until you turn it on.** Set this in ``<config dir>/plugins/Aircraft.ini``, then restart:
+**It is off until you turn it on.** Set this in ``<config dir>/plugins/Aircraft.toml``, then restart:
 
 	[plugin]
-	enabled = True
+	enabled = true
 
 	[Aircraft]
 	source = adsb.fi
@@ -402,28 +402,28 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 
 	__defaultConfig__ = """
 	[plugin]
-	enabled = False
+	enabled = false
 
 	[Aircraft]
-	source = adsb.fi
+	source = "adsb.fi"
 	radius = 50
 	interval = 60
 	fast_interval = 5
-	adaptive = True
+	adaptive = true
 	lookout = 0
 	speed_cap = 500
 	straightness = 0
 	path_window = 1200
 	trail_points = 40
 	slots = 20
-	ground = False
+	ground = false
 	trigger_radius = 10
 	trigger_altitude = 0
 	max_altitude = 0
-	military = True
+	military = true
 	hold = 60
-	latitude =
-	longitude =
+	latitude = ""
+	longitude = ""
 	"""
 
 	def __init__(self):

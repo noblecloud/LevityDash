@@ -12,16 +12,16 @@ Usage: deploy-config.sh [WHAT]
 Selectively sync config/settings to lambda. Only syncs what you explicitly ask for.
 
 Options:
-  plugins       Sync plugin configs (plugins.ini + per-plugin configs)
+  plugins       Sync plugin configs (plugins.toml + per-plugin configs)
   dashboards    Sync dashboard layout files (.levity)
   panels        Sync saved item files (saves/panels)
-  config        Sync main config.ini only
+  config        Sync main config.toml only
   all           Sync everything (plugins + config, NOT dashboards/panels)
   --help        Show this help
 
 Examples:
   deploy-config.sh plugins       # Push plugin config changes to lambda
-  deploy-config.sh config        # Push config.ini changes to lambda
+  deploy-config.sh config        # Push config.toml changes to lambda
   deploy-config.sh all           # Push plugins + config (not dashboards/panels)
 EOF
 }
@@ -49,10 +49,10 @@ case "$WHAT" in
       "${REMOTE_HOST}:${REMOTE_CONFIG}/plugins/"
     ;;
   config)
-    echo "── Syncing config.ini ──"
+    echo "── Syncing config.toml ──"
     rsync "${RSYNC_OPTS[@]}" \
-      "${LOCAL_CONFIG}/config.ini" \
-      "${REMOTE_HOST}:${REMOTE_CONFIG}/config.ini"
+      "${LOCAL_CONFIG}/config.toml" \
+      "${REMOTE_HOST}:${REMOTE_CONFIG}/config.toml"
     ;;
   dashboards)
     echo "── Syncing dashboard layouts ──"
@@ -72,8 +72,8 @@ case "$WHAT" in
       "${LOCAL_CONFIG}/plugins/" \
       "${REMOTE_HOST}:${REMOTE_CONFIG}/plugins/"
     rsync "${RSYNC_OPTS[@]}" \
-      "${LOCAL_CONFIG}/config.ini" \
-      "${REMOTE_HOST}:${REMOTE_CONFIG}/config.ini"
+      "${LOCAL_CONFIG}/config.toml" \
+      "${REMOTE_HOST}:${REMOTE_CONFIG}/config.toml"
     ;;
   *)
     echo "Unknown option: $WHAT"

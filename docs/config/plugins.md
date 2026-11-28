@@ -1,19 +1,19 @@
 # Plugin Configuration
 
 ## The Basics <!-- {docsify-ignore} -->
-Plugin config files are currently INI files but will eventually be changed to TOML or YAML. The main config file, `plugins.ini` is located in the `plugins` directory of your config folder.
+Plugin config files are TOML (older `.ini` files are converted on first start; see [Application Configuration](/config/config.md)). The main config file, `plugins.toml` is located in the `plugins` directory of your config folder.
 
 Every plugin has an optional `defaultFor` parameter that is used to give the plugin priority when choosing where to pull data for display. It is currently a space separated list of strings and the stings can be any part of a key.
 
-```ini
-; Any key with temperature or wind
-defaultFor = temperature wind
+```toml
+# Any key with temperature or wind
+defaultFor = "temperature wind"
 
-; All indoor keys
-defaultFor = indoor
+# All indoor keys
+defaultFor = "indoor"
 
-; Only indoor temperatures
-defaultFor = indoor.temperature
+# Only indoor temperatures
+defaultFor = "indoor.temperature"
 ```
 
 ### Which source wins
@@ -26,14 +26,14 @@ When several plugins publish the same key, a display shows the first of these th
 
 `priority` is a number; higher wins, and the number of `defaultFor` entries only breaks ties. Built-in values: WeatherFlow 20 (your own station), PirateWeather and OpenMeteo 10, anything else 0, OpenWeatherMap -10 (last resort; its free tier was the least accurate). Set your own in the plugin's section:
 
-```ini
+```toml
 [plugin]
 priority = 15
 ```
 
 `maxAge` is how many minutes a live reading may go without an update before the plugin stops being preferred for that key; `0` turns it off. WeatherFlow defaults to 30, so when a station's sensor dies (only the base still reports pressure, say) the other keys come from PirateWeather or OpenMeteo while the pressure stays the station's. A reading from a source with no `maxAge` is never treated as old.
 
-```ini
+```toml
 [plugin]
 maxAge = 15
 ```
@@ -41,17 +41,17 @@ maxAge = 15
 A single item can still pin a source with `Source:key`, for example `OpenMeteo:environment.temperature.temperature`.
 
 ## Individual Plugin Config <!-- {docsify-ignore} -->
-Each plugin can have its own config file of the same name or a `config.ini` file within a folder of the same name
+Each plugin can have its own config file of the same name or a `config.toml` file within a folder of the same name
 
 ```treeview
 {config_dir}/
-`-- config.ini
+`-- config.toml
 `-- plugins/
-	|-- plugins.ini
-	|-- WeatherFlow.ini
-	|-- OpenMeteo.ini
+	|-- plugins.toml
+	|-- WeatherFlow.toml
+	|-- OpenMeteo.toml
 	`-- Govee/
-			`-- config.ini
+			`-- config.toml
 ```
 
 ---
@@ -63,7 +63,7 @@ The sun, from the clock and the `[Location]` section of your [config](/config/ap
 - `astronomy.sun.hour`: the local hour of day as a decimal, so 15.5 is 15:30.
 - `astronomy.sun.remaining`: minutes of daylight left today. It is `0` at night.
 
-The plugin is on by default. To turn it off, set `enabled = False` in `CONFIG_DIR/plugins/Astronomy.ini`. A scenario that defines either key wins over the plugin.
+The plugin is on by default. To turn it off, set `enabled = false` in `CONFIG_DIR/plugins/Astronomy.toml`. A scenario that defines either key wins over the plugin.
 
 ## Lost connections
 

@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Callable
 
@@ -110,12 +111,12 @@ _enableMessage = (
 	"information at https://openweathermap.org/api"
 )
 
-_defaultConfig = f""";All independent configs must have a plugin section
+_defaultConfig = f"""# All independent configs must have a plugin section
 
 [plugin]
-enabled = @ask(bool:False).message({_enableMessage})
-apikey = @ask(str:).message(Enter API Key)
-defaultFor =
+enabled = {json.dumps(f"@ask(bool:False).message({_enableMessage})")}
+apikey = "@ask(str:).message(Enter API Key)"
+defaultFor = ""
 """
 
 

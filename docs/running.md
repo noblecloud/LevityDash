@@ -19,11 +19,11 @@ Start the backend:
 poetry run LevityDash-backend
 ```
 
-In your config (`config.ini`), set the frontend to remote mode:
+In your config (`config.toml`), set the frontend to remote mode:
 
-```ini
+```toml
 [Backend]
-mode = remote
+mode = "remote"
 ```
 
 Then launch the frontend as usual:

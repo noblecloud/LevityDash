@@ -4,18 +4,18 @@
 
 This section is pretty self-explanatory. If blank, Levity will guess the location based on the devices IP address.
 
-```ini
+```toml
 [Location]
-timezone = America/New_York
+timezone = "America/New_York"
 latitude = 37.8
 longitude = -76.1
 ```
 
 ## Backend
 
-```ini
+```toml
 [Backend]
-mode = live
+mode = "live"
 ```
 
 Controls whether the frontend runs its own plugins or attaches to a standalone backend process.
@@ -37,14 +37,14 @@ The standalone backend ignores this setting — it always ingests plugins live.
 
 ## Display
 
-```ini
+```toml
 [Display]
-dashboard = default.levity
-frontend = Qt
-fullscreen = False
-locked = False
-width = 90%
-height = 600px
+dashboard = "default.levity"
+frontend = "Qt"
+fullscreen = false
+locked = false
+width = "90%"
+height = "600px"
 ```
 
 ### <div class=mono>dashboard</div>
@@ -87,13 +87,13 @@ If provided a real-world measurement like centimeters, the value will be estimat
 
 ## QtOptions
 
-```ini
+```toml
 [QtOptions]
-openGL = True
-antialiasing = True
+openGL = true
+antialiasing = true
 antialiasingSamples = 8
-maxTextureSize = 10mb
-pixmapCacheSize = 200mb
+maxTextureSize = "10mb"
+pixmapCacheSize = "200mb"
 ```
 
 When ```True```, Levity will use OpenGL to render the UI. This is the default.
@@ -140,10 +140,10 @@ The size of the invisible grab area around resize/drag handles, making them easi
 
 ## Menu Bar
 
-```ini
+```toml
 [MenuBar]
-fullscreen = hidden
-normal = show
+fullscreen = "hidden"
+normal = "show"
 delay = 1.0
 ```
 
@@ -152,12 +152,12 @@ Controls menu bar visibility per window state: `fullscreen` and `normal` each ac
 
 ## Fonts
 
-```ini
+```toml
 [Fonts]
-default = Nunito
-default.weight = Medium
-compact = Nunito
-compact.weight = Medium
+default = "Nunito"
+"default.weight" = "Medium"
+compact = "Nunito"
+"compact.weight" = "Medium"
 ```
 
 This is where you can define the default font and it's properties. The default font will be used wherever the font is not explicitly defined.
@@ -166,16 +166,16 @@ The compact font is used when the text will be rendered in space with a height l
 
 ## Logging
 
-```ini
+```toml
 [Logging]
-level = WARNING
+level = "WARNING"
 verbosity = 0
 rich = 1
-encoding = utf-8
-logFileFormat = %%Y-%%m-%%d_%%H-%%M-%%S
+encoding = "utf-8"
+logFileFormat = "%Y-%m-%d_%H-%M-%S"
 logFileWidth = 120
 
-rolloverSize = 10mb
+rolloverSize = "10mb"
 rolloverCount = 5
 ```
 
@@ -241,24 +241,24 @@ This is the number of files to keep with the rolling file logger. The default is
 The sections below are for UnitCorn (formerly WeatherUnits), the library that converts and localizes measurements for display. More information on how it's configured can be found in
 the [UnitCorn repo](https://github.com/noblecloud/unitcorn).
 
-```ini
+```toml
 [Units]
-wind = mi/hr
-temperature = f
-precipitationRate = inch/*
-precipitationHourly = inch/hr
-precipitation = inch
-pressure = inHg
-density = lbs/ft
-pollutionDensity = ug/m
-length = mi
+wind = "mi/hr"
+temperature = "f"
+precipitationRate = "inch/*"
+precipitationHourly = "inch/hr"
+precipitation = "inch"
+pressure = "inHg"
+density = "lbs/ft"
+pollutionDensity = "ug/m"
+length = "mi"
 
 [UnitDefaults]
 precision = 1
 max = 3
 
 [UnitProperties]
-temperature = precision=0, max=3, unitSpacer=False, shorten=False, kSeparator=True, decorator=º, showUnit=False
+temperature = { precision = 0, max = 3, unitSpacer = false, shorten = false, kSeparator = true, decorator = "º", showUnit = false }
 ```
 
 LevityDash reads `[Units]` when it starts. A length such as a rain caption is then shown in the same unit on every start, and the first paint already uses it.

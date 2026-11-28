@@ -5,9 +5,11 @@ The location of the config folder is platform specific so the easiest way access
 <small>
 
 ?> **_NOTE:_**
-LevityDash currently uses python's built in config parser and uses it's ini file format.
-This will eventually be changed to TOML or YAML within the next few releases.
-I am hoping to have an auto migration tool in place before the switch, but I can see the of the next few dev releases making the switch before the migration tool is ready.
+The application and plugin settings are TOML files: `config.toml` and the files in `plugins/`. Dashboards stay YAML.
+
+If you have an older `config.ini` (or `plugins/*.ini`), LevityDash converts it the first time it starts: each `.ini` becomes a `.toml` beside it and the original is kept as `.ini.bak`. Nothing needs editing by hand. If a file cannot be converted (a read-only folder, a file it cannot read) it logs the reason and keeps reading the `.ini` until it can. When both a `.toml` and an `.ini` exist, the `.toml` is used.
+
+Text values are quoted (`dashboard = "default.levity"`), numbers and `true`/`false` are not. A key with a dot in it is quoted too (`"default.weight" = "Medium"`). A line starting with `#` is a comment, in place of the `;` an INI used.
 
 </small>
 
@@ -39,23 +41,23 @@ I am hoping to have an auto migration tool in place before the switch, but I can
 
 This section is pretty self-explanatory. If blank, Levity will guess the location based on the devices IP address.
 
-```ini
+```toml
 [Location]
-timezone = America/New_York
+timezone = "America/New_York"
 latitude = 37.8
 longitude = -76.1
 ```
 
 ## Display
 
-```ini
+```toml
 [Display]
-dashboard = default.levity
-workspace = 
-frontend = Qt
-fullscreen = False
-width = 90%
-height = 600px
+dashboard = "default.levity"
+workspace = ""
+frontend = "Qt"
+fullscreen = false
+width = "90%"
+height = "600px"
 ```
 
 ### <div class=mono>dashboard</div>
@@ -89,13 +91,13 @@ If provided a real-world measurement like centimeters, the value will be estimat
 
 ### Qt
 
-```ini
+```toml
 [QtOptions]
-openGL = True
-antialiasing = True
+openGL = true
+antialiasing = true
 antialiasingSamples = 8
-maxTextureSize = 10mb
-pixmapCacheSize = 200mb
+maxTextureSize = "10mb"
+pixmapCacheSize = "200mb"
 ```
 
 #### <div class=mono>openGL</div> 
@@ -127,12 +129,12 @@ are stored in a QPixmapCache, this option limits the size of that cache.
 
 ## Fonts
 
-```ini
+```toml
 [Fonts]
-default = Nunito
-default.weight = Medium
-compact = Nunito
-compact.weight = Medium
+default = "Nunito"
+"default.weight" = "Medium"
+compact = "Nunito"
+"compact.weight" = "Medium"
 ```
 
 This is where you can define the default font and it's properties. The default font will be used wherever the font is not explicitly defined.
@@ -140,16 +142,16 @@ The compact font is used when the text will be rendered in space with a height l
 
 ## Logging
 
-```ini
+```toml
 [Logging]
-level = WARNING
+level = "WARNING"
 verbosity = 0
 rich = 1
-encoding = utf-8
-logFileFormat = %%Y-%%m-%%d_%%H-%%M-%%S
+encoding = "utf-8"
+logFileFormat = "%Y-%m-%d_%H-%M-%S"
 logFileWidth = 120
 
-rolloverSize = 10mb
+rolloverSize = "10mb"
 rolloverCount = 5
 ```
 
@@ -237,10 +239,10 @@ The maximum size of the folder where pretty error files are stored. This is only
 
 Your comfort range is the band of temperatures that feels neutral to you. The temperature scale (`$temperature`, or the older `TemperatureGradient`) is plain white across it, blue below it and orange to purple above it. Every gradient that uses the scale follows the one setting: the forecast line, the outdoor temperature's `fill-gradient`, a gauge arc, a colour bound to a reading.
 
-```ini
+```toml
 [Comfort]
-low = 55°F
-high = 72°F
+low = "55°F"
+high = "72°F"
 ```
 
 ### <div class=mono>low/high</div>
@@ -256,24 +258,24 @@ A colour that you write as stops yourself (`gradient: {50°F: ..., 80°F: ...}`)
 The sections below are for UnitCorn (formerly WeatherUnits), the library that converts and localizes measurements for display. More information on how it's configured can be found in
 the [UnitCorn repo](https://github.com/noblecloud/unitcorn).
 
-```ini
+```toml
 [Units]
-wind = mi/hr
-temperature = f
-precipitationRate = inch/*
-precipitationHourly = inch/hr
-precipitation = inch
-pressure = inHg
-density = lbs/ft
-pollutionDensity = ug/m
-length = mi
+wind = "mi/hr"
+temperature = "f"
+precipitationRate = "inch/*"
+precipitationHourly = "inch/hr"
+precipitation = "inch"
+pressure = "inHg"
+density = "lbs/ft"
+pollutionDensity = "ug/m"
+length = "mi"
 
 [UnitDefaults]
 precision = 1
 max = 3
 
 [UnitProperties]
-temperature = precision=0, max=3, unitSpacer=False, shorten=False, kSeparator=True, decorator=º, showUnit=False
+temperature = { precision = 0, max = 3, unitSpacer = false, shorten = false, kSeparator = true, decorator = "º", showUnit = false }
 ```
 
 LevityDash reads `[Units]` when it starts. A length such as a rain caption is then shown in the same unit on every start, and the first paint already uses it.

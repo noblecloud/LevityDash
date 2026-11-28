@@ -431,17 +431,17 @@ class Plugin(metaclass=PluginMeta):
 
 		The file is named for the class, as `getConfig` looks for it: `cls.name` is a property on a plugin
 		(Govee names each instance after its device), so on the class it is a property object and gave files
-		called `<property object at 0x...>.ini`.
+		called `<property object at 0x...>.toml`.
 		"""
 		if destination is None:
-			destination = EasyPathFile(pluginConfig.userPluginsDir.path / f'{cls.__name__}.ini', make=True)
+			destination = EasyPathFile(pluginConfig.userPluginsDir.path / f'{cls.__name__}.toml', make=True)
 		elif isinstance(destination, str | Path):
 			destination = EasyPath(destination)
 
 		if not destination.parent in pluginConfig.userPluginsDir:
 			destination = pluginConfig.userPluginsDir / destination
 		if not isinstance(destination, EasyPathFile):
-			destination /= f'{cls.__name__}.ini'
+			destination /= f'{cls.__name__}.toml'
 
 		config = cls.__defaultConfig__
 		if isinstance(config, Path) and config.exists() and config.is_file() and config.endswith('.ini'):
@@ -457,14 +457,19 @@ class Plugin(metaclass=PluginMeta):
 
 	@classmethod
 	def getConfig(cls, plugin: 'Plugin'):
-		ns = SimpleNamespace(file=f'{cls.__name__}.ini')
+		ns = SimpleNamespace(file=f'{cls.__name__}.toml', legacy=f'{cls.__name__}.ini')
 
 		# Look in the userPlugins directory for config files.
-		# Plugin configs can either be in userPlugins/PluginName/config.ini or userPlugins/PluginName.ini
+		# Plugin configs can either be in userPlugins/PluginName/config.toml or userPlugins/PluginName.toml.
+		# An .ini is only left there when it could not be moved to TOML (see lib/configfile.py).
 		match pluginConfig.userPluginsDir.asDict(depth=2):
-			case {cls.__name__: {'config.ini': file}} if file.stat().st_size:
+			case {cls.__name__: {'config.toml': file}} if file.stat().st_size:
 				return PluginConfig(path=file.path, plugin=plugin)
 			case {ns.file: file} if file.stat().st_size:
+				return PluginConfig(path=file.path, plugin=plugin)
+			case {cls.__name__: {'config.ini': file}} if file.stat().st_size:
+				return PluginConfig(path=file.path, plugin=plugin)
+			case {ns.legacy: file} if file.stat().st_size:
 				return PluginConfig(path=file.path, plugin=plugin)
 		try:
 			return cls.getDefaultConfig(plugin)

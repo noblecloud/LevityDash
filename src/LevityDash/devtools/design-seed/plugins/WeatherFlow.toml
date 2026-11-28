@@ -1,0 +1,9 @@
+[plugin]
+enabled = false
+token = ""
+stationID = ""
+deviceID = ""
+socketUpdates = true
+socketType = "udp"
+fetchHistory = false
+defaultFor = "temperature wind pressure humidity light lightning"

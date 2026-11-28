@@ -26,7 +26,7 @@ items:
   resolved to when it loaded, and the file as written: wherever the live value still equals the
   resolved one, it writes the template's text; wherever it differs (the user edited it, or the app
   normalised it) it writes the live value.
-- A `vars.yaml` beside `config.ini` holds variables for every dashboard. The file's own `vars:` is read after it,
+- A `vars.yaml` beside `config.toml` holds variables for every dashboard. The file's own `vars:` is read after it,
   so a name defined in both takes the file's value, and a file variable may use a shared one.
 - Nothing here raises: a bad `vars:` is logged and the file loads without it.
 

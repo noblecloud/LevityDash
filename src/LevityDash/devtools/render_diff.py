@@ -15,7 +15,7 @@ What makes two captures comparable
   the Mock plugin's own table (`Mock.MOCK_KEYS`, parsed from source, not copied)
   at its `base` value. Nothing then depends on Mock's sine waves, its per-run
   `random` phases or the wall clock.
-- **Mock is switched off.** The design seed enables it (`Mock.ini`), and
+- **Mock is switched off.** The design seed enables it (`Mock.toml`), and
   `_boot.startFixture` starts it beside the scenario, which is how two showcase
   renders of unchanged code came to differ by ~48k pixels. Each capture stages
   its own copy of the seed (`_seed/`) with `enabled = False`.
@@ -276,14 +276,14 @@ def stage_seed(directory: Path, scenario: Optional[dict] = None) -> Path:
 	if directory.exists():
 		shutil.rmtree(directory)
 	shutil.copytree(DESIGN_SEED, directory)
-	mock_ini = directory / 'plugins' / 'Mock.ini'
-	mock_ini.parent.mkdir(parents=True, exist_ok=True)
-	mock_ini.write_text('[plugin]\nenabled = False\n')
+	mock_config = directory / 'plugins' / 'Mock.toml'
+	mock_config.parent.mkdir(parents=True, exist_ok=True)
+	mock_config.write_text('[plugin]\nenabled = false\n')
 	if scenario is not None and (unit := length_unit_in(scenario)):
-		config_ini = directory / 'config.ini'
-		text = config_ini.read_text()
+		config_file = directory / 'config.toml'
+		text = config_file.read_text()
 		if re.search(r'^length\s*=', text, re.M):
-			config_ini.write_text(re.sub(r'^length\s*=.*$', f'length = {unit}', text, flags=re.M))
+			config_file.write_text(re.sub(r'^length\s*=.*$', f'length = "{unit}"', text, flags=re.M))
 	return directory
 
 

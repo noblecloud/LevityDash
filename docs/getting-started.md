@@ -44,11 +44,11 @@ poetry run LevityDash-backend
 poetry run python -m LevityDash.backend
 ```
 
-Then set the frontend to attach to it. This is done in the config file (`config.ini`, `[Backend]` section):
+Then set the frontend to attach to it. This is done in the config file (`config.toml`, `[Backend]` section):
 
-```ini
+```toml
 [Backend]
-mode = remote
+mode = "remote"
 ```
 
 Now launch the frontend normally — it connects to the backend and renders the dashboard:

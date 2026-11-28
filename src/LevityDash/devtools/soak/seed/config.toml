@@ -1,0 +1,100 @@
+[Location]
+timezone = "America/New_York"
+latitude = 40.7128
+longitude = "-74.0060"
+
+[Backend]
+mode = "remote"
+host = "127.0.0.1"
+
+[Display]
+dashboard = "default.levity"
+frontend = "Qt"
+fullscreen = false
+display = "smallest"
+width = "8.56in"
+height = "5.35in"
+liveUpdateTimedeltas = true
+
+[QtOptions]
+openGL = false
+antialiasing = true
+antialiasingSamples = 8
+maxTextureSize = "10mb"
+pixmapCacheSize = "200mb"
+status-bar = true
+
+[MenuBar]
+fullscreen = "hidden"
+normal = "show"
+delay = 1.0
+
+[Fonts]
+default = "Nunito"
+"default.weight" = "Medium"
+compact = "Nunito"
+"compact.weight" = "Medium"
+title = "Roboto"
+"title.weight" = "Light"
+
+[Logging]
+level = "INFO"
+verbosity = 3
+encoding = "utf-8"
+logTimeFormat = "%m/%d/%y %H:%M:%S"
+logFileWidth = 120
+maxLogFolderSize = "200mb"
+maxLogAge = "7 days"
+rolloverSize = "10mb"
+rolloverCount = 5
+prettyErrors = false
+maxPrettyErrorsFolderSize = "50mb"
+
+[Units]
+wind = "mph"
+temperature = "f"
+precipitationRate = "inch/*"
+precipitationHourly = "inch/hr"
+precipitation = "inch"
+pressure = "inHg"
+density = "lbs/ft^3"
+pollutionDensity = "ug/m"
+length = "mi"
+
+[UnitDefaults]
+precision = 1
+digit_budget = 3
+unit = ""
+suffix = ""
+unit_symbol = ""
+unit_spacer = true
+title = ""
+exp = 1
+slide = false
+show_unit = true
+shorten = false
+k_separator = false
+combine_unit_and_suffix = false
+trailing_zeros = "off"
+
+[UnitProperties]
+Tiny = { precision = 3, digit_budget = 4 }
+Small = { precision = 2, digit_budget = 4 }
+Medium = { precision = 1, digit_budget = 3 }
+Large = { precision = 1, digit_budget = 3 }
+Huge = { precision = 2, digit_budget = 3 }
+pressure = { precision = 2, digit_budget = 4 }
+mmHg = { precision = 2, digit_budget = 4, trailing_zeros = "precision" }
+inHg = { precision = 2, digit_budget = 4, trailing_zeros = "precision" }
+voltage = { precision = 2, digit_budget = 3, unit_spacer = false }
+UVI = { unit_spacer = false }
+density = { precision = 3, digit_budget = 4, trailing_zeros = "precision" }
+time = { precision = 0, digit_budget = 2, unit_spacer = false, shorten = true }
+temperature = { precision = 0, digit_budget = 3, unit_spacer = false, shorten = false, k_separator = true, show_unit = false }
+direction = { cardinal = true, degrees = false, size_hint = "WW", shorten = true, digit_budget = 3 }
+strikes = { precision = 0, digit_budget = 2 }
+illuminance = { digit_budget = 3, shorten = true }
+wind = { precision = 1, digit_budget = 2 }
+precipitationRate = { precision = 2, digit_budget = 2 }
+precipitation = { precision = 2, digit_budget = 2 }
+humidity = { precision = 0, digit_budget = 2 }

@@ -6,26 +6,26 @@ Additionally, how the values are calculated differ from model to model.
 For the plugin to function, there must be an identifier for the device you want to use. If you do not have any of the possible identifiers you can provide either `closest` or `first` as `device.id` along with the model of the device
 as `device.model` and the plugin will find the device and save the correct information to the config file.
 
-```ini
-; CONFIG_DIR/plugins/Govee/config.ini
+```toml
+# CONFIG_DIR/plugins/Govee/config.toml
 [Config]
 ...
-device.id = closest
-device.model = GVH5102
+"device.id" = "closest"
+"device.model" = "GVH5102"
 ...
 ```
 
 There are a few options for setting the device identification.
 
-```ini
-; CONFIG_DIR/plugins/Govee/config.ini
+```toml
+# CONFIG_DIR/plugins/Govee/config.toml
 [Config]
 ...
-; Any of the following will work for identification
-device.name =
-device.uuid =
-device.mac =
-device.id =
+# Any of the following will work for identification
+"device.name" = ""
+"device.uuid" = ""
+"device.mac" = ""
+"device.id" = ""
 ```
 
 As far as parsing the data, the slicing locations and expressions needed can usually be found by searching the model of the device on github.
@@ -39,15 +39,15 @@ expression with a single undefined variable as the payload.
 Example (Click to expand)
 </summary>
 
-``` ini
-; CONFIG_DIR/plugins/Govee/config.ini
+```toml
+# CONFIG_DIR/plugins/Govee/config.toml
 [Config]
 ...
-temperature.slice = [4:10]
-temperature.expression = val / 10000
-humidity.slice = [4:10]
-humidity.expression = payload % 1000 / 1000
-battery.slice = [10:12]
+"temperature.slice" = "[4:10]"
+"temperature.expression" = "val / 10000"
+"humidity.slice" = "[4:10]"
+"humidity.expression" = "payload % 1000 / 1000"
+"battery.slice" = "[10:12]"
 ```
 
 </details>
@@ -61,11 +61,11 @@ battery.slice = [10:12]
 
 A device can say where it is with `where`, a dotted path. A dashboard item can then ask for that place with `where:` instead of the device's name.
 
-```ini
-; Govee.ini
-[device:bedroom]
-name = GVH5102_6736
-where = home.upstairs.bedroom
+```toml
+# Govee.toml
+["device:bedroom"]
+name = "GVH5102_6736"
+where = "home.upstairs.bedroom"
 ```
 
 A device with no `where` uses its alias as its place, so `where: bedroom` finds `bedroom` with no change to an older config.

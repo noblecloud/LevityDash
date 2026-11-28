@@ -6,11 +6,11 @@ rate, a power meter that goes negative. This plugin publishes plausible values
 for those, so a dashboard design has live data to move against.
 
 **It is off until you turn it on.** The plugin always loads, and its config file
-``Mock.ini`` starts with ``enabled = False``. To use it, set this in
-``<config dir>/plugins/Mock.ini``:
+``Mock.toml`` starts with ``enabled = false``. To use it, set this in
+``<config dir>/plugins/Mock.toml``:
 
 	[plugin]
-	enabled = True
+	enabled = true
 
 Then restart. The values come from the plugin's own thread, so the same
 plugin works in ``mode=live`` and in a headless backend that a remote frontend
@@ -96,7 +96,7 @@ class Mock(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 
 	__defaultConfig__ = """
 	[plugin]
-	enabled = False
+	enabled = false
 
 	[Mock]
 	interval = 2

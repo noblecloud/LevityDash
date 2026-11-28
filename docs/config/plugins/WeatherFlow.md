@@ -23,30 +23,30 @@ From there you can find both the station ID and the device ID.
 Example (Click to expand)
 </summary>
 
-```ini
-[Config] ; Since the config file is an INI, a main section must be provided
-enabled = False
+```toml
+[Config] # a main section must be provided
+enabled = false
 
-; Enables/disables socket updates
-socketUpdates = True
+# Enables/disables socket updates
+socketUpdates = true
 
-; Set socket to web or udp
-socketType = web
+# Set socket to web or udp
+socketType = "web"
 
-; Enables/disables getting historical when the plugin is loaded.
-fetchHistory = False
+# Enables/disables getting historical when the plugin is loaded.
+fetchHistory = false
 
-;This is the ID of the station you want to monitor
-stationID = {StationID}
+# This is the ID of the station you want to monitor
+stationID = "{StationID}"
 
-;Only used for getting historical data
-deviceID = {DeviceID}
+# Only used for getting historical data
+deviceID = "{DeviceID}"
 
-;https://tempestwx.com/settings/tokens
-token = {API Token}
+# https://tempestwx.com/settings/tokens
+token = "{API Token}"
 
-;Defines that this plugin should take priority as the data source
-defaultFor = temperature wind ... 
+# Defines that this plugin should take priority as the data source
+defaultFor = "temperature wind ..."
 ```
 
 </details>

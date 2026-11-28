@@ -12,8 +12,8 @@ Sunrise and sunset come from ``ephem``, the same library the moon uses, for the
 ``[Location]`` latitude and longitude in the main config. During a polar day
 or night the day is treated as the whole 24 hours or nothing.
 
-The plugin is on by default. Set ``enabled = False`` in
-``<config dir>/plugins/Astronomy.ini`` to turn it off. A scenario that defines
+The plugin is on by default. Set ``enabled = false`` in
+``<config dir>/plugins/Astronomy.toml`` to turn it off. A scenario that defines
 either key wins over it, so renders stay repeatable.
 """
 import asyncio
@@ -88,7 +88,7 @@ class Astronomy(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 
 	__defaultConfig__ = """
 	[plugin]
-	enabled = True
+	enabled = true
 
 	[Astronomy]
 	interval = 30

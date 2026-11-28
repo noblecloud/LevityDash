@@ -1,0 +1,6 @@
+[plugin]
+enabled = true
+
+[devices]
+bedroom = "GVH5102_6736"
+terrarium = "GVH5102_527D"

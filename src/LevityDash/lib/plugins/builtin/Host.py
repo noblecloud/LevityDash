@@ -16,10 +16,10 @@ Percentages are fractions (0.458 is 45.8 %), because unitcorn reads a value abov
 at or below 1 as a fraction, so a whole-percent 0.1 would show as 10 %. A process's ``cpu`` is a share of the
 whole machine, not of one core.
 
-**It is off until you turn it on.** Set this in ``<config dir>/plugins/Host.ini``, then restart:
+**It is off until you turn it on.** Set this in ``<config dir>/plugins/Host.toml``, then restart:
 
 	[plugin]
-	enabled = True
+	enabled = true
 
 	[Host]
 	interval = 2
@@ -150,7 +150,7 @@ class Host(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 
 	__defaultConfig__ = """
 	[plugin]
-	enabled = False
+	enabled = false
 
 	[Host]
 	interval = 2
