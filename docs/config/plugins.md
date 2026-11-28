@@ -71,14 +71,49 @@ REST plugins retry a failed request. The UDP listener and the WeatherFlow websoc
 
 ## Saved history
 
-A plugin that keeps a log (WeatherFlow and Govee) writes it to a small file as it runs. When the app starts again, it reads the last two days back, so a graph of what your sensors measured is not empty while the plugins warm up.
+LevityDash keeps what it pulls, so a restart does not empty the graphs and a display that boots before its wifi still shows the last forecast. The default is **InfluxDB 3 Core**, a time-series database that the supervisor (`LevityDash-run`) starts next to the app as a plain process (no container) and keeps running. QuestDB is the drop-in alternative, and a SQLite file is the fallback when no server can be reached, so the display never waits on a database.
 
-- The file is `history.sqlite3` in the app's cache folder. It is a cache. You can delete it and nothing else changes.
-- A plugin writes at most once a minute. Rows older than two days are deleted.
-- Only the log comes back. The current value of a key does not. It shows when the sensor next reports, so a value that is hours old never looks fresh.
-- A restored value keeps the time it was recorded. If you change a unit setting, the old values show in the new unit.
-- If the file cannot be opened or written, the plugins run without history and the app logs it once.
-- Set `LEVITYDASH_HISTORY=off` to turn it off. Set `LEVITYDASH_HISTORY_DB` to a file path to keep it somewhere else.
+What is kept, all in one table keyed by plugin, stream and key:
+
+- **The log** of every plugin that has one (WeatherFlow and Govee), about once a minute. The last two days (`restore`) are read back when the plugins start, so graphs are not empty while the plugins warm up.
+- **Snapshots** of every other plugin's current values (aircraft, host vitals and so on), every few minutes.
+- **Responses**: the body of each REST response (forecasts, ...) as fetched, once every 15 minutes per endpoint. If a forecast cannot be fetched after a start, the stored one is used until a fetch succeeds.
+- Only the log goes back into a plugin. The current value of a key is not restored, so a value that is hours old never looks fresh. A restored value keeps the time it was recorded, and shows in your current unit settings.
+
+```toml
+[History]
+backend = "influxdb"    # influxdb, questdb or sqlite
+retention = 30          # days to keep rows
+restore = 2             # days read back at start-up
+raw = true              # keep fetched responses
+```
+
+Every key is optional.
+
+| Key | Default | |
+| --- | --- | --- |
+| `enabled` | `true` | `false` keeps nothing |
+| `backend` | `influxdb` | `influxdb`, `questdb` or `sqlite` |
+| `fallback` | `sqlite` | what to use when the server cannot be reached at start (`none` runs without history) |
+| `host`, `port` | `localhost`, 8181 (InfluxDB) or 9000 (QuestDB) | where the server is; the supervisor only starts one that is on this machine |
+| `database` | `levitydash` | InfluxDB database name |
+| `token` | none | bearer token for a server you run with auth; the supervisor does not start a server for you then |
+| `username`, `password` | none | QuestDB basic auth |
+| `path` | the cache folder's `history.sqlite3` | the SQLite file |
+| `retention` | `30` | days a row is kept (InfluxDB sets it on the database; QuestDB drops whole days; SQLite deletes rows) |
+| `restore` | `2` | days read back into the plugins at start |
+| `raw`, `raw-every` | `true`, `15` | keep fetched responses, at most one per endpoint per this many minutes |
+| `snapshots`, `snapshot-every` | `true`, `5` | snapshots of plugins without a log, minutes apart |
+
+### Running the database
+
+Install it once on the machine that runs the display: `brew install influxdb3-core` (or download it from influxdata.com and set `binary` under `[History]`). `LevityDash-run` then starts it before the backend and the frontend, on `127.0.0.1:8181` without auth (nothing else can reach it, and its usage upload to InfluxData is switched off), keeps it up and stops it last. A file change restarts the app, never the database. The data is in the app's data folder under `history/influxdb`. Without the supervisor, run `influxdb3 serve --node-id levitydash --object-store file --data-dir DIR` yourself, or `LevityDash-run --no-history` to leave it alone.
+
+InfluxDB 3 Core limits how much one query may read (about 72 hours of data; a quiet database reaches further). The default `restore` of two days is inside it. Its free at-home Enterprise licence lifts the limit.
+
+To use QuestDB instead: `backend = "questdb"`, and either start it yourself or give `command` (a command that runs QuestDB in the foreground) so the supervisor keeps it up. The server's tables are made on first use.
+
+The environment overrides the file: `LEVITYDASH_HISTORY=off`, `LEVITYDASH_HISTORY_BACKEND=sqlite|influxdb|questdb`, `LEVITYDASH_HISTORY_DB=/path/file.sqlite3` (SQLite at that path). If the database cannot be reached, the app logs it once, and keeps its history in the SQLite file for that run; restart the app after fixing the server to go back to it.
 
 ---
 

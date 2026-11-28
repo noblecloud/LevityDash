@@ -144,6 +144,7 @@ class PluginsLoader(metaclass=GlobalSingleton, name='plugins'):
 			history.restoreLog(plugin_)
 		for plugin_ in plugin_threads:
 			plugin_.thread.start()
+		history.startRecorder(self)
 		pluginLog.info(' Thread Pool Started '.center(80, '-'))
 
 	def stop(self):

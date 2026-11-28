@@ -45,9 +45,9 @@ def test_the_store_round_trips_entries_oldest_first(db):
 	assert [values for _, values in store.read('B')] == [{'a.b.c': 9}]
 
 
-def test_rows_older_than_two_days_are_deleted_when_the_file_opens(db):
+def test_rows_older_than_the_retention_are_deleted_when_the_file_opens(db):
 	store = history.historyStore()
-	store.write('A', datetime.now(timezone.utc) - timedelta(days=3), {'k.k.k': 1})
+	store.write('A', datetime.now(timezone.utc) - timedelta(days=40), {'k.k.k': 1})
 	store.write('A', datetime.now(timezone.utc) - timedelta(hours=1), {'k.k.k': 2})
 	history._forget()
 	assert [v for _, v in history.historyStore().read('A', since=datetime.now(timezone.utc) - timedelta(days=9))] == [{'k.k.k': 2}]
@@ -112,3 +112,64 @@ def test_a_plugin_that_logs_its_values_writes_them_to_the_file(db, monkeypatch):
 	# Straight after, the one-a-minute limit holds the next write back.
 	asyncio.run(plugin.logValues())
 	assert len(history.historyStore().read(plugin.name)) == 1
+
+
+def test_a_plugin_without_a_log_is_snapshotted_in_its_own_stream(db, monkeypatch):
+	plugin = _plugin(monkeypatch)
+	assert history.recordRealtime(plugin) > 0
+	store = history.historyStore()
+	assert [v for _, v in store.read(plugin.name, stream='realtime')]
+	assert store.read(plugin.name) == []  # the log stream is untouched
+	assert history.recordRealtime(plugin) == 0  # snapshots are spaced by [History] snapshot-every
+
+
+def test_a_response_is_kept_once_per_interval_and_read_back(db):
+	class P:
+		name = 'Rest'
+
+	body = {'hourly': {'temperature_2m': [1.5, 2.5]}, 'note': 'ünï "code"'}
+	assert history.recordRaw(P, 'forecast', body)
+	assert not history.recordRaw(P, 'forecast', {'newer': 1})  # inside raw-every
+	assert history.recordRaw(P, 'other', {'x': 1})  # another endpoint has its own clock
+	when, kept = history.latestRaw(P, 'forecast')
+	assert kept == body
+	assert abs((datetime.now(timezone.utc) - when).total_seconds()) < 5
+	assert history.latestRaw(P, 'missing') is None
+	assert history.latestRaw(P, 'forecast', within=timedelta(seconds=-1)) is None
+
+
+def test_a_response_too_big_to_keep_is_left_out(db):
+	class P:
+		name = 'Big'
+
+	assert not history.recordRaw(P, 'huge', {'blob': 'x' * (history.MAX_RAW_BYTES + 1)})
+	assert history.latestRaw(P, 'huge') is None
+
+
+def test_the_extent_of_a_key_comes_from_the_store(db):
+	class P:
+		name = 'E'
+
+	now = datetime.now(timezone.utc)
+	store = history.historyStore()
+	store.write('E', now - timedelta(hours=3), {'a.b.c': 10.0})
+	store.write('E', now - timedelta(hours=1), {'a.b.c': 30.0})
+	extent = history.extentOf(P, 'a.b.c', now - timedelta(days=1))
+	assert (extent.count, extent.minimum, extent.maximum) == (2, 10.0, 30.0)
+
+
+def test_rest_uses_the_stored_response_only_until_it_has_had_a_good_one(db):
+	from types import SimpleNamespace
+	from LevityDash.lib.plugins.web.rest import REST
+
+	messages = []
+	plugin = SimpleNamespace(name='Weather', pluginLog=SimpleNamespace(warning=messages.append))
+	plugin._REST__rawName = lambda endpoint: REST._REST__rawName(plugin, endpoint)
+	endpoint = SimpleNamespace(name='forecast')
+	assert REST._REST__storedData(plugin, endpoint) is None  # nothing stored yet
+	REST._REST__rememberData(plugin, endpoint, {'hourly': [1, 2]})
+	plugin._goodFetches.clear()  # a restart: this run has fetched nothing yet
+	assert REST._REST__storedData(plugin, endpoint) == {'hourly': [1, 2]}
+	assert messages and 'could not be fetched' in messages[0]
+	REST._REST__rememberData(plugin, endpoint, {'hourly': [3]})
+	assert REST._REST__storedData(plugin, endpoint) is None  # a good fetch this run: no stale fallback
