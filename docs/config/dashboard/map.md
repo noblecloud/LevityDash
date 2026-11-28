@@ -6,6 +6,7 @@
 - type: map
   layer: radar            # radar | temperature | wind | clouds | none
   zoom: 7                 # 1 world .. 16 street
+  scheme: darksky         # darksky | apple | neon | classic
   # lat: 40.7             # the centre; left out it is [Location] from your config
   # lon: -74.0
 ```
@@ -18,7 +19,8 @@ A map with no `lat` and `lon` is centred on `[Location]`, and a dot marks that p
 | `lat`, `lon` | `[Location]` | The centre. |
 | `zoom` | `7` | 1 shows the world, 16 a street. Fractions are fine. Radar data stops at 7 and is stretched past that. |
 | `basemap` | `auto` | `auto` follows the theme's background (dark or light), or choose `dark`, `light`; `none` draws the layer on the dashboard itself. |
-| `labels` | `true` | Place names over the data. |
+| `scheme` | `darksky` | The colours of the rain and temperature: `darksky`, `apple`, `neon` or `classic` (below). |
+| `labels` | `true` | Place names over the data. They keep clear of the stamp, legend and credit. |
 | `opacity` | `0.92` radar, `0.74` fields | How solid the data layer is, `0` to `1`. |
 | `animate` | `true` | Radar loops through the last two hours. `false` shows the newest picture. Click the map to pause. |
 | `speed` | `600` | Milliseconds a radar frame shows. The newest frame stays three times as long. |
@@ -43,8 +45,16 @@ If a service cannot be reached the map keeps what it has and asks again a minute
 
 The palettes are written in Oklch, so the middle of every ramp stays vivid instead of going grey the way an sRGB mix does (`lib/.../weathermap/palette.py`).
 
-- **Rain** runs from a pale cyan drizzle through blue and violet to magenta, with a warm core for the heaviest cells. Light rain is almost see-through; heavy rain is nearly solid.
-- **Temperature** has a quiet middle: the soft green-to-yellow band is your `[Comfort]` range, and the colder and hotter stops slide with it (the same rule as the temperature gradients). Set `[Comfort] low` and `high` and the map follows.
+`scheme:` picks the rain and temperature colours. In every scheme light rain is almost see-through and heavy rain nearly solid.
+
+| Scheme | Rain | Temperature |
+|---|---|---|
+| `darksky` (default) | Blue that deepens with weight; only storm cores turn yellow, orange and red. | Purple frost, blue cold, green and yellow mild, red heat. |
+| `apple` | Green drizzle, then yellow, orange and red, with a purple core. | As `darksky`. |
+| `neon` | LevityDash's own: pale cyan through blue and violet to magenta, a warm core. | Quieter: teal and lime in the middle. |
+| `classic` | The TV radar bands: flat greens, yellow, orange, reds and magenta with hard edges. | As `darksky`. |
+
+- **Temperature** has a quiet middle in every scheme: the mild band is your `[Comfort]` range, and the colder and hotter stops slide with it (the same rule as the temperature gradients). Set `[Comfort] low` and `high` and the map follows.
 - **Wind** is clear in calm air, then teal, green, amber and red.
 - **Clouds** are a cool white that thickens.
 

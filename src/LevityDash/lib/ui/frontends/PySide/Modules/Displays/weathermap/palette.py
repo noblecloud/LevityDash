@@ -20,7 +20,7 @@ import numpy as np
 from LevityDash.lib.ui.colors import comfort
 from LevityDash.lib.ui.colors.oklch import oklch_srgb
 
-__all__ = ['Stop', 'RAMPS', 'ramp', 'lut', 'colorize', 'temperatureRamp', 'rainviewerIntensity', 'swatch']
+__all__ = ['Stop', 'RAMPS', 'SCHEMES', 'precipRamp', 'ramp', 'lut', 'colorize', 'temperatureRamp', 'rainviewerIntensity', 'swatch']
 
 #: `(t, L, C, h, alpha)`
 Stop = tuple[float, float, float, float, float]
@@ -56,6 +56,59 @@ CLOUDS: tuple[Stop, ...] = (
 )
 
 RAMPS: dict[str, tuple[Stop, ...]] = {'precip': PRECIP, 'wind': WIND, 'clouds': CLOUDS}
+
+#: Dark Sky's way: rain is blue that deepens with weight, and only the cores of storms turn yellow, orange and red.
+PRECIP_DARKSKY: tuple[Stop, ...] = (
+	(0.00, 0.80, 0.070, 240, 0.00),
+	(0.03, 0.82, 0.080, 240, 0.42),
+	(0.16, 0.74, 0.125, 248, 0.66),
+	(0.34, 0.64, 0.165, 256, 0.80),
+	(0.55, 0.52, 0.195, 266, 0.89),
+	(0.58, 0.88, 0.170, 98, 0.92),
+	(0.76, 0.77, 0.175, 62, 0.94),
+	(0.88, 0.64, 0.215, 32, 0.96),
+	(1.00, 0.56, 0.225, 12, 0.98),
+)
+
+#: The weather-app look: green drizzle, yellow, orange and red rain, a purple core.
+PRECIP_APPLE: tuple[Stop, ...] = (
+	(0.00, 0.82, 0.130, 150, 0.00),
+	(0.03, 0.84, 0.150, 148, 0.45),
+	(0.18, 0.76, 0.190, 145, 0.72),
+	(0.40, 0.90, 0.180, 102, 0.84),
+	(0.58, 0.79, 0.170, 68, 0.90),
+	(0.76, 0.65, 0.210, 32, 0.94),
+	(0.90, 0.56, 0.220, 10, 0.96),
+	(1.00, 0.58, 0.220, 320, 0.98),
+)
+
+#: The television radar: the NWS reflectivity bands, flat colours with hard edges.
+PRECIP_CLASSIC: tuple[Stop, ...] = (
+	(0.00, 0.80, 0.170, 145, 0.00),
+	(0.02, 0.80, 0.170, 145, 0.70),
+	(0.18, 0.80, 0.170, 145, 0.70), (0.18, 0.64, 0.170, 145, 0.85),
+	(0.36, 0.64, 0.170, 145, 0.85), (0.36, 0.50, 0.140, 145, 0.90),
+	(0.52, 0.50, 0.140, 145, 0.90), (0.52, 0.92, 0.180, 105, 0.92),
+	(0.64, 0.92, 0.180, 105, 0.92), (0.64, 0.76, 0.170, 62, 0.94),
+	(0.76, 0.76, 0.170, 62, 0.94), (0.76, 0.62, 0.230, 30, 0.96),
+	(0.88, 0.62, 0.230, 30, 0.96), (0.88, 0.48, 0.190, 28, 0.97),
+	(0.94, 0.48, 0.190, 28, 0.97), (0.94, 0.66, 0.270, 330, 0.98),
+	(1.00, 0.66, 0.270, 330, 0.98),
+)
+
+#: `scheme:` on a map: the name, and its precipitation ramp. `neon` is LevityDash's own.
+SCHEMES: dict[str, tuple[Stop, ...]] = {
+	'darksky': PRECIP_DARKSKY,
+	'apple': PRECIP_APPLE,
+	'neon': PRECIP,
+	'classic': PRECIP_CLASSIC,
+}
+
+
+def precipRamp(scheme: str = 'darksky') -> tuple[Stop, ...]:
+	"""The precipitation stops of a colour scheme."""
+	return SCHEMES.get(scheme, PRECIP_DARKSKY)
+
 
 
 def _mix_hue(a: float, b: float, f: float) -> float:
@@ -130,17 +183,34 @@ _TEMPERATURE: tuple[tuple[float, float, float, float, float], ...] = (
 	(52.0, 0.58, 0.240, 340, 0.92),
 )
 
+#: The temperature map of Dark Sky and the weather apps: purple frost, blue cold, green and yellow mild, red heat.
+_TEMPERATURE_VIVID: tuple[tuple[float, float, float, float, float], ...] = (
+	(-30.0, 0.50, 0.180, 305, 0.86),
+	(-15.0, 0.52, 0.200, 275, 0.86),
+	(-2.0, 0.66, 0.170, 245, 0.84),
+	(6.0, 0.78, 0.120, 205, 0.80),
+	(comfort.DEFAULT_LOW, 0.82, 0.150, 160, 0.78),
+	(comfort.DEFAULT_HIGH, 0.90, 0.170, 108, 0.78),
+	(28.0, 0.80, 0.170, 70, 0.84),
+	(34.0, 0.68, 0.210, 42, 0.88),
+	(42.0, 0.58, 0.230, 25, 0.90),
+	(52.0, 0.46, 0.190, 15, 0.92),
+)
 
-def temperatureRamp(low: Optional[float] = None, high: Optional[float] = None) -> tuple[tuple[Stop, ...], float, float]:
+_TEMPERATURES = {'neon': _TEMPERATURE, 'darksky': _TEMPERATURE_VIVID, 'apple': _TEMPERATURE_VIVID, 'classic': _TEMPERATURE_VIVID}
+
+
+def temperatureRamp(low: Optional[float] = None, high: Optional[float] = None, scheme: str = 'neon') -> tuple[tuple[Stop, ...], float, float]:
 	"""`(stops, lo, hi)`: the temperature ramp for a comfort band, and the °C its ends stand for.
 
 	Without `low` and `high` the band comes from `[Comfort]` in the user's config.
 	"""
 	if low is None or high is None:
 		low, high = comfort.configured()
-	celsius = [comfort.shift(c, low, high) for c, *_ in _TEMPERATURE]
+	table = _TEMPERATURES.get(scheme, _TEMPERATURE)
+	celsius = [comfort.shift(c, low, high) for c, *_ in table]
 	lo, hi = celsius[0], celsius[-1]
-	stops = tuple(((c - lo)/(hi - lo), L, C, h, a) for c, (_, L, C, h, a) in zip(celsius, _TEMPERATURE))
+	stops = tuple(((c - lo)/(hi - lo), L, C, h, a) for c, (_, L, C, h, a) in zip(celsius, table))
 	return stops, lo, hi
 
 

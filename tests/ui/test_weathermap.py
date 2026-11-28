@@ -85,6 +85,27 @@ def test_the_precipitation_ramp_runs_from_cyan_through_violet_to_a_warm_core():
 	assert top[0] > top[2]  # warm
 
 
+@pytest.mark.parametrize('scheme', list(palette.SCHEMES))
+def test_every_scheme_gets_more_opaque_with_intensity(scheme):
+	alpha = palette.lut(palette.precipRamp(scheme))[:, 3].astype(int)
+	assert alpha[0] == 0 and alpha[-1] > 200
+	assert (np.diff(alpha) >= 0).all()
+
+
+def test_dark_sky_rain_is_blue_and_its_storms_are_warm():
+	stops = palette.precipRamp('darksky')
+	light, moderate, heavy = (palette.ramp(stops, t) for t in (0.16, 0.45, 0.9))
+	assert light[2] > light[0] and light[2] > light[1]
+	assert moderate[2] > moderate[0] and moderate[2] > moderate[1]
+	assert heavy[0] > heavy[2] and heavy[0] > heavy[1]
+
+
+def test_the_schemes_differ_and_an_unknown_one_falls_back_to_dark_sky():
+	light = {name: palette.swatch(palette.precipRamp(name), 5)[1] for name in palette.SCHEMES}
+	assert len(set(light.values())) == len(light)
+	assert palette.precipRamp('nope') == palette.precipRamp('darksky')
+
+
 def test_hue_turns_the_short_way():
 	assert palette._mix_hue(350, 10, 0.5) == pytest.approx(0)
 	assert palette._mix_hue(10, 350, 0.5) == pytest.approx(0)
@@ -316,6 +337,32 @@ def test_radar_arrives_and_paints_in_our_palette(dashboard, offline):
 		sandbox.delete()
 
 
+def test_a_scheme_change_repaints_the_radar(dashboard, offline):
+	sandbox, item = _map(dashboard, layer='radar', animate=False, legend=False, stamp=False, labels=False)
+	try:
+		_wait(dashboard, lambda: item._currentFrame(item._viewport()) is not None)
+		before = _grab(item)
+		item.scheme = 'apple'
+		after = _grab(item)
+		x, y = before.width()//2, before.height()//2
+		assert before.pixelColor(x, y) != after.pixelColor(x, y)
+		assert item.scheme == 'apple'
+	finally:
+		sandbox.delete()
+
+
+def test_place_names_are_drawn(dashboard, offline):
+	sandbox, item = _map(dashboard, layer='none')
+	try:
+		base = item._baseStyle()
+		labels = data.BASEMAPS[base.name + '-labels']
+		spot = item._viewport().tiles(labels.max_zoom)[0]
+		_wait(dashboard, lambda: ('labels', labels.name, *spot.key) in item._base)
+		assert item._labelImage(labels, spot) is not None
+	finally:
+		sandbox.delete()
+
+
 def test_the_loop_steps_through_pictures_that_are_complete(dashboard, offline):
 	sandbox, item = _map(dashboard, layer='radar', speed=50)
 	try:
@@ -393,7 +440,7 @@ def test_bad_numbers_are_refused_with_a_reason(dashboard, offline, bad):
 		sandbox.delete()
 
 
-@pytest.mark.parametrize('bad', [{'layer': 'snow'}, {'basemap': 'sepia'}, {'tiles': 'ftp://x/{z}/{x}/{y}'}, {'tiles': 'https://x/{z}'}])
+@pytest.mark.parametrize('bad', [{'layer': 'snow'}, {'basemap': 'sepia'}, {'scheme': 'rainbow'}, {'tiles': 'ftp://x/{z}/{x}/{y}'}, {'tiles': 'https://x/{z}'}])
 def test_a_bad_word_in_a_dashboard_makes_an_error_tile_not_a_map(dashboard, offline, bad):
 	from LevityDash.lib.ui.frontends.PySide.Modules.Displays.weathermap.item import WeatherMap
 	sandbox = None

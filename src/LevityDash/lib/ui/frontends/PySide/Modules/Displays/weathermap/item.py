@@ -7,6 +7,7 @@
   lat: 40.7                   # the centre; both left out: [Location] from the config
   lon: -74.0
   basemap: auto               # auto | dark | light | none; auto follows the theme's background
+  scheme: darksky             # darksky | apple | neon | classic: the rain and temperature colours
   labels: true                # place names over the data
   opacity: 0.9                # of the data layer; left out: 0.92 for radar, 0.74 for the fields
   animate: true               # radar: loop the last two hours; false shows the latest picture
@@ -60,6 +61,7 @@ log = LevityPluginLog.getChild('WeatherMap')
 
 _LAYERS = ('radar', 'temperature', 'wind', 'clouds', 'none')
 _BASEMAPS = ('auto', 'dark', 'light', 'none')
+_SCHEMES = tuple(palette.SCHEMES)
 _FIELD_REFRESH = 1800.0
 _RETRY = 60.0
 _TILE_LIMIT = 320  #: tiles kept in memory, per kind
@@ -145,6 +147,7 @@ class WeatherMap(Panel, tag='map'):
 		self._lon: Optional[float] = None
 		self._zoom = 7.0
 		self._basemap = 'auto'
+		self._scheme = 'darksky'
 		self._labels = True
 		self._opacity: Optional[float] = None
 		self._animate = True
@@ -162,7 +165,8 @@ class WeatherMap(Panel, tag='map'):
 		self._shown = 0
 		self._base: dict = {}
 		self._tint: dict = {}
-		self._radar: dict = {}
+		self._radar: dict = {}  #: echo strength per tile, 0..1 floats
+		self._radarImages: dict = {}  #: those painted in the scheme
 		self._fieldGrid: Optional[data.FieldGrid] = None
 		self._fieldKey = None
 		self._fieldAt = 0.0
@@ -298,7 +302,7 @@ class WeatherMap(Panel, tag='map'):
 				if key in self._radar or self._loader.busy(key) or not self._due(key):
 					continue
 				url = data.radarUrl(frame, *spot.key)
-				self._loader.request(key, lambda url=url: _decodeRadar(data.fetch(url, ttl=3600)), self._arrived)
+				self._loader.request(key, lambda url=url: palette.rainviewerIntensity(toArray(data.fetch(url, ttl=3600))), self._arrived)
 
 	def _askFields(self, vp: Viewport):
 		columns, rows = self._gridSize(vp)
@@ -328,7 +332,7 @@ class WeatherMap(Panel, tag='map'):
 		if kind in ('base', 'labels'):
 			_remember(self._base, key, result)
 		elif kind == 'radar':
-			_remember(self._radar, key, toImage(result), limit=_TILE_LIMIT*2)
+			_remember(self._radar, key, result, limit=_TILE_LIMIT*2)
 		elif kind == 'index':
 			self._frames = result
 			self._framesAt = time.monotonic()
@@ -459,6 +463,18 @@ class WeatherMap(Panel, tag='map'):
 	def basemap(self, value) -> str:
 		return _oneOf('basemap', str(value).lower(), _BASEMAPS)
 
+	@StateProperty(key='scheme', default='darksky', allowNone=False, after=refresh)
+	def scheme(self) -> str:
+		return self._scheme
+
+	@scheme.setter
+	def scheme(self, value: str):
+		self._scheme = _oneOf('scheme', str(value).lower().replace(' ', '').replace('-', ''), _SCHEMES)
+
+	@scheme.decode
+	def scheme(self, value) -> str:
+		return _oneOf('scheme', str(value).lower().replace(' ', '').replace('-', ''), _SCHEMES)
+
 	@StateProperty(key='labels', default=True, allowNone=False, after=_reload)
 	def labels(self) -> bool:
 		return self._labels
@@ -585,8 +601,16 @@ class WeatherMap(Panel, tag='map'):
 		if image is None:
 			span = (base.land - base.water) or 1.0
 			t = (lum[0] - base.water)/span
-			t = np.clip(np.where(t > 1.0, 1.0 + (t - 1.0)*3.0, t), 0.0, 2.2)[..., None]  # borders and roads sit just above land: lift them
+			t = np.clip(np.where(t > 1.0, 1.0 + (t - 1.0)*3.0, t), 0.0, 2.2)[..., None]  # roads and towns sit just above land: lift them
 			rgb = sea + (land - sea)*t
+			# Coasts, borders and rivers are thin lines a shade off the land around them, dark on the dark map, so they
+			# vanish. Wherever a pixel differs from its neighbours, draw towards the text colour instead.
+			below = base.land - lum[0]  # how far under the land a pixel is
+			near = _spread(lum[0], 1)
+			# not next to anything brighter than land: the base's own state names are pale letters with dark edges
+			line = np.where((below > span*0.15) & (near < base.land + span*0.3), near - lum[0], 0.0)/span
+			line = np.clip((line - 0.15)*1.6, 0.0, 1.0)[..., None]
+			rgb = rgb + (_rgb('text') - rgb)*line*(0.42 if base.dark else 0.30)
 			out = np.empty(rgb.shape[:2] + (4,), dtype=np.uint8)
 			out[..., :3] = np.clip(rgb, 0, 255).astype(np.uint8)
 			out[..., 3] = 255
@@ -597,7 +621,7 @@ class WeatherMap(Panel, tag='map'):
 		return image
 
 	def _labelImage(self, base: data.Basemap, spot) -> Optional[QImage]:
-		key = ('labels', base.name + '-labels', *spot.key)
+		key = ('labels', base.name, *spot.key)  # `base` is the labels map itself, as `_askTiles` keyed it
 		tile = self._base.get(key)
 		if tile is None:
 			return None
@@ -606,10 +630,17 @@ class WeatherMap(Panel, tag='map'):
 		image = self._tint.get(tint)
 		if image is None:
 			lum, alpha = tile
-			strength = np.clip(lum*1.8, 0.0, 1.0)  # the glyphs are bright, their halo is not
+			glyph = alpha*np.clip(lum*1.8, 0.0, 1.0)  # the tile draws bright glyphs inside a dark halo of its own
+			halo = (alpha - glyph).clip(0.0, 1.0)*0.55  # keep that halo, in the background colour, so names read over rain
+			ground = _rgb('background')
+			ink = np.array([color.red(), color.green(), color.blue()], dtype=np.float64)
+			glyph = np.clip(glyph*1.25, 0.0, 1.0)
+			a = glyph + halo*(1.0 - glyph)
+			mix = glyph/np.maximum(a, 1e-6)
+			rgb = ground + (ink - ground)*mix[..., None]
 			out = np.empty(alpha.shape + (4,), dtype=np.uint8)
-			out[..., 0], out[..., 1], out[..., 2] = color.red(), color.green(), color.blue()
-			out[..., 3] = np.clip(alpha*strength*color.alpha()*0.72, 0, 255).astype(np.uint8)
+			out[..., :3] = np.clip(rgb, 0, 255).astype(np.uint8)
+			out[..., 3] = np.clip(a*color.alpha(), 0, 255).astype(np.uint8)
 			image = toImage(out)
 			_remember(self._tint, tint, image)
 		return image
@@ -663,10 +694,19 @@ class WeatherMap(Panel, tag='map'):
 		painter.setOpacity(1.0)
 		if base is not None and self._labels and not self._tiles:
 			labels = data.BASEMAPS[base.name + '-labels']
+			painter.save()
+			clip = QPainterPath()
+			clip.addRect(rect)
+			for area in self._keepClear(rect, base):
+				hole = QPainterPath()
+				hole.addRect(area)
+				clip = clip.subtracted(hole)
+			painter.setClipPath(clip, Qt.ClipOperation.IntersectClip)
 			for spot in vp.tiles(labels.max_zoom):
 				image = self._labelImage(labels, spot)
 				if image is not None:
 					painter.drawImage(QRectF(spot.left, spot.top, spot.size, spot.size), image)
+			painter.restore()
 		self._paintMarker(painter, vp)
 		self._paintLegend(painter, rect)
 		self._paintCredit(painter, rect, base)
@@ -678,7 +718,7 @@ class WeatherMap(Panel, tag='map'):
 			if frame is None:
 				return
 			for spot in vp.tiles(data.RADAR_MAX_ZOOM):
-				image = self._radar.get(('radar', frame.time, *spot.key))
+				image = self._radarImage(('radar', frame.time, *spot.key))
 				if image is not None:
 					painter.drawImage(QRectF(spot.left, spot.top, spot.size, spot.size), image)
 		elif self._layer in ('temperature', 'wind', 'clouds'):
@@ -687,6 +727,17 @@ class WeatherMap(Panel, tag='map'):
 				painter.drawImage(rect, image)
 			if self._layer == 'wind':
 				self._paintArrows(painter, vp)
+
+	def _radarImage(self, key) -> Optional[QImage]:
+		intensity = self._radar.get(key)
+		if intensity is None:
+			return None
+		cached = (key, self._scheme)
+		image = self._radarImages.get(cached)
+		if image is None:
+			image = toImage(palette.colorize(intensity, palette.lut(palette.precipRamp(self._scheme))))
+			_remember(self._radarImages, cached, image, limit=_TILE_LIMIT*2)
+		return image
 
 	def _currentFrame(self, vp: Viewport) -> Optional[data.Frame]:
 		if not self._frames:
@@ -706,10 +757,10 @@ class WeatherMap(Panel, tag='map'):
 	def _fieldScale(self):
 		"""`(stops, lo, hi)` for the current field layer."""
 		if self._layer == 'temperature':
-			stops, lo, hi = palette.temperatureRamp()
+			stops, lo, hi = palette.temperatureRamp(scheme=self._scheme)
 			if self._range is not None:
 				lo, hi = self._range
-				stops, _, _ = palette.temperatureRamp(*_bandFor(lo, hi))
+				stops, _, _ = palette.temperatureRamp(*_bandFor(lo, hi), scheme=self._scheme)
 			return stops, lo, hi
 		if self._layer == 'wind':
 			lo, hi = self._range or (0.0, 22.0)
@@ -720,7 +771,7 @@ class WeatherMap(Panel, tag='map'):
 		grid = self._fieldGrid
 		if grid is None:
 			return None
-		key = (self._layer, self._range, round(vp.width), round(vp.height), id(grid))
+		key = (self._layer, self._scheme, self._range, round(vp.width), round(vp.height), id(grid))
 		if self._fieldImage is not None and self._fieldImage[0] == key:
 			return self._fieldImage[1]
 		name = {'temperature': 'temperature', 'wind': 'wind', 'clouds': 'clouds'}[self._layer]
@@ -787,7 +838,7 @@ class WeatherMap(Panel, tag='map'):
 	def _legendSpec(self):
 		"""`(stops, from, to, left label, right label, title)`: the ramp, the part of it the bar shows (0..1), and its words."""
 		if self._layer == 'radar':
-			return palette.PRECIP, 0.0, 1.0, 'Light', 'Heavy', 'Rain'
+			return palette.precipRamp(self._scheme), 0.0, 1.0, 'Light', 'Heavy', 'Rain'
 		stops, lo, hi = self._fieldScale()
 		if self._layer == 'temperature':
 			# Show the band people live in, not the whole -30 to 52 °C the ramp can paint.
@@ -809,16 +860,10 @@ class WeatherMap(Panel, tag='map'):
 		if not self._legend:
 			return
 		stops, t0, t1, left, right, _ = self._legendSpec()
-		unit = min(rect.width(), rect.height())
-		margin = unit*0.04
-		size = max(10.0, unit*0.045)
+		x0, y0, barW, barH, size = self._legendGeometry(rect)
 		font = self._font(size)
 		metrics = QFontMetricsF(font)
-		barW = max(90.0, min(rect.width()*0.34, unit*0.55))
-		barH = max(5.0, size*0.42)
 		text = theme.active().color('text').QColor
-		muted = theme.active().color('muted').QColor
-		x0, y0 = rect.left() + margin, rect.bottom() - margin - metrics.height() - barH - size*0.25
 		gradient = QLinearGradient(x0, 0, x0 + barW, 0)
 		table = range(48)
 		for i in range(len(table)):
@@ -835,7 +880,8 @@ class WeatherMap(Panel, tag='map'):
 		self._text(painter, QPointF(x0, baseline), left, text)
 		self._text(painter, QPointF(x0 + barW - metrics.horizontalAdvance(right), baseline), right, text)
 
-	def _paintStamp(self, painter: QPainter, rect: QRectF):
+	def _stampSpec(self, rect: QRectF):
+		"""`(label, font, baseline point)` of the stamp."""
 		unit = min(rect.width(), rect.height())
 		margin = unit*0.04
 		size = max(11.0, unit*0.052)
@@ -853,10 +899,25 @@ class WeatherMap(Panel, tag='map'):
 			label += '  ❚❚'
 		font = self._font(size)
 		font.setLetterSpacing(QFont.SpacingType.PercentageSpacing, 104)
-		painter.setFont(font)
-		self._text(painter, QPointF(rect.left() + margin, rect.top() + margin + QFontMetricsF(font).ascent()), label, theme.active().color('text').QColor)
+		return label, font, QPointF(rect.left() + margin, rect.top() + margin + QFontMetricsF(font).ascent())
 
-	def _paintCredit(self, painter: QPainter, rect: QRectF, base: Optional[data.Basemap]):
+	def _paintStamp(self, painter: QPainter, rect: QRectF):
+		label, font, point = self._stampSpec(rect)
+		painter.setFont(font)
+		self._text(painter, point, label, theme.active().color('text').QColor)
+
+	def _legendGeometry(self, rect: QRectF):
+		"""`(x, y, bar width, bar height, font size)` of the legend."""
+		unit = min(rect.width(), rect.height())
+		margin = unit*0.04
+		size = max(10.0, unit*0.045)
+		metrics = QFontMetricsF(self._font(size))
+		barW = max(90.0, min(rect.width()*0.34, unit*0.55))
+		barH = max(5.0, size*0.42)
+		return rect.left() + margin, rect.bottom() - margin - metrics.height() - barH - size*0.25, barW, barH, size
+
+	def _creditSpec(self, rect: QRectF, base: Optional[data.Basemap]):
+		"""`(text, font, baseline point)` of the credit line, or None."""
 		parts = []
 		if base is not None:
 			parts.append('Esri, © OpenStreetMap' if not self._tiles else 'map tiles: see source')
@@ -865,14 +926,40 @@ class WeatherMap(Panel, tag='map'):
 		elif self._layer in ('temperature', 'wind', 'clouds'):
 			parts.append(self._fieldGrid.source if self._fieldGrid is not None else 'Open-Meteo')
 		if not parts:
-			return
+			return None
 		unit = min(rect.width(), rect.height())
 		font = self._font(max(7.0, unit*0.026), QFont.Weight.Normal)
 		metrics = QFontMetricsF(font)
-		painter.setFont(font)
-		color = QColor(theme.active().color('muted').QColor)
 		text = ' · '.join(parts)
-		self._text(painter, QPointF(rect.right() - unit*0.03 - metrics.horizontalAdvance(text), rect.bottom() - unit*0.03 - metrics.descent()), text, color)
+		return text, font, QPointF(rect.right() - unit*0.03 - metrics.horizontalAdvance(text), rect.bottom() - unit*0.03 - metrics.descent())
+
+	def _keepClear(self, rect: QRectF, base: Optional[data.Basemap]) -> list[QRectF]:
+		"""Where the stamp, legend and credit sit, so place names stay out from under them."""
+		areas = []
+
+		def textBox(text, font, point):
+			metrics = QFontMetricsF(font)
+			pad = metrics.height()*0.3
+			return QRectF(point.x() - pad, point.y() - metrics.ascent() - pad, metrics.horizontalAdvance(text) + pad*2, metrics.height() + pad*2)
+
+		if self._layer != 'none':
+			if self._stamp:
+				areas.append(textBox(*self._stampSpec(rect)))
+			if self._legend:
+				x, y, w, h, size = self._legendGeometry(rect)
+				pad = size*0.4
+				areas.append(QRectF(x - pad, y - pad, w + pad*2, h + size*0.25 + QFontMetricsF(self._font(size)).height() + pad*2))
+		if (credit := self._creditSpec(rect, base)) is not None:
+			areas.append(textBox(*credit))
+		return areas
+
+	def _paintCredit(self, painter: QPainter, rect: QRectF, base: Optional[data.Basemap]):
+		credit = self._creditSpec(rect, base)
+		if credit is None:
+			return
+		text, font, point = credit
+		painter.setFont(font)
+		self._text(painter, point, text, QColor(theme.active().color('muted').QColor))
 
 
 def _bandFor(lo: float, hi: float) -> tuple[float, float]:
@@ -883,14 +970,19 @@ def _bandFor(lo: float, hi: float) -> tuple[float, float]:
 	return lo + (hi - lo)*built[0], lo + (hi - lo)*built[1]
 
 
+def _spread(values: np.ndarray, radius: int) -> np.ndarray:
+	"""The largest value within `radius` pixels of each pixel (a square dilation)."""
+	out = values
+	for _ in range(radius):
+		padded = np.pad(out, 1, mode='edge')
+		h, w = out.shape
+		out = np.maximum.reduce([padded[1 + dy:1 + dy + h, 1 + dx:1 + dx + w] for dy in (-1, 0, 1) for dx in (-1, 0, 1)])
+	return out
+
+
 def _decodeBase(body: bytes):
 	"""A base-map tile as `(lum, alpha)`: luma 0..1 and alpha 0..1 floats, which is all the tint needs."""
 	rgba = toArray(body).astype(np.float32)/255.0
 	lum = 0.2126*rgba[..., 0] + 0.7152*rgba[..., 1] + 0.0722*rgba[..., 2]
 	return lum, rgba[..., 3]
 
-
-def _decodeRadar(body: bytes) -> np.ndarray:
-	"""A RainViewer tile as RGBA bytes painted with the dashboard palette."""
-	intensity = palette.rainviewerIntensity(toArray(body))
-	return palette.colorize(intensity, palette.lut(palette.PRECIP))
