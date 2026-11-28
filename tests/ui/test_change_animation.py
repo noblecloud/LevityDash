@@ -83,7 +83,7 @@ def change(dashboard, label, text):
 
 
 #: What each style adds to the item while it runs (the rest add one child).
-ADDED = {'glow': 3, 'shake': 0, 'blur': 5}
+ADDED = {'glow': 3, 'shake': 0, 'blur': 5, 'delta': 0}  # delta's badge sits in the scene, over the card
 
 
 @pytest.mark.parametrize('style', ['fade', 'slide', 'flash', 'tint', 'roll', 'slot', 'count', 'pop', 'flip', 'glow', 'shake', 'delta', 'blur', 'wipe', 'typewriter', 'scramble'])

@@ -525,8 +525,19 @@ class _Delta(_Effect):
 		# the badge's right edge on the text's, its bottom just above the text's top
 		path.translate(ink.right() - rect.right(), ink.top() - gap - rect.bottom())
 		self.rise = rect.height() * DELTA_RISE
-		badge = _child(item, path, QBrush(Color.role(token).QColor), QPen(Qt.PenStyle.NoPen))
-		badge.setZValue(1)
+		# the badge floats above the text, outside the card a value usually fills and clips to: it lives in the
+		# scene itself, over everything, in scene pixels
+		toScene = item.sceneTransform()
+		path = toScene.map(path)
+		self.rise *= abs(toScene.m22()) or 1.0
+		badge = QGraphicsPathItem(path)
+		badge.setBrush(QBrush(Color.role(token).QColor))
+		badge.setPen(QPen(Qt.PenStyle.NoPen))
+		badge.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+		badge.setAcceptHoverEvents(False)
+		badge.setZValue(1e6)
+		if (scene := item.scene()) is not None:
+			scene.addItem(badge)
 		self.children.append(badge)
 		self.badge = badge
 
