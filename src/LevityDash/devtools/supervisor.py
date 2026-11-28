@@ -44,6 +44,8 @@ from aiohttp import web
 
 from qolkit.hotkeys import CTRL_R, HotkeyListener
 
+from LevityDash.devtools.history_server import readHistoryConfig, serverCommand
+
 __all__ = ['cli']
 
 DEFAULT_DEBOUNCE_MS = 2000
@@ -365,6 +367,9 @@ class Runner:
 		self.children: List[Child] = []
 		self.backendChild: Optional[Child] = None
 		self.frontendChild: Optional[Child] = None
+		#: The history database. Started first, left alone by a restart (a file change must not stop it) and stopped last.
+		self.historyChild: Optional[Child] = None
+		self.historyServer = None
 		#: Held for the length of a deliberate restart. Without it the
 		#: supervise loop sees the frontend stopped mid-restart, calls it a
 		#: crash, and starts it again before the backend is back - so a single
@@ -377,6 +382,14 @@ class Runner:
 			print(f'[run] mode={self.mode}: the frontend runs plugins itself, so no separate backend')
 		logDir = None if args.no_capture else Path(args.log_dir).expanduser()
 		maxBytes = int(args.log_max_mb * 1024 * 1024)
+		if not args.no_history:
+			server, why = serverCommand(readHistoryConfig())
+			if server is None:
+				print(f'[run] no history database to start: {why}')
+			else:
+				self.historyServer = server
+				self.historyChild = Child('history', server.argv, REPO_ROOT, logDir=logDir, logMaxBytes=maxBytes, logBackups=args.log_backups)
+				self.children.append(self.historyChild)
 		if wantBackend:
 			self.backendChild = Child('backend', [sys.executable, '-m', 'LevityDash.backend'],
 			                          REPO_ROOT, logDir=logDir, logMaxBytes=maxBytes, logBackups=args.log_backups)
@@ -386,7 +399,17 @@ class Runner:
 			                           REPO_ROOT, logDir=logDir, logMaxBytes=maxBytes, logBackups=args.log_backups)
 			self.children.append(self.frontendChild)
 
+	async def startHistory(self) -> None:
+		"""Start the database and wait for it, so the plugins' first read of saved history finds it."""
+		if self.historyChild is None:
+			return
+		await self.historyChild.start()
+		server = self.historyServer
+		if not await waitForPort(server.host, server.port, timeout=self.args.backend_timeout):
+			print(f'[run] the history database never listened on {server.host}:{server.port} - the app falls back to its file')
+
 	async def startAll(self) -> None:
+		await self.startHistory()
 		if self.backendChild is not None:
 			await self.backendChild.start()
 			if not await waitForPort(self.host, self.port, timeout=self.args.backend_timeout):
@@ -472,7 +495,7 @@ class Runner:
 
 	async def stopAll(self) -> None:
 		# Frontend first, for the same reason as a restart.
-		for child in (self.frontendChild, self.backendChild):
+		for child in (self.frontendChild, self.backendChild, self.historyChild):
 			if child is not None:
 				await child.stop()
 
@@ -480,7 +503,7 @@ class Runner:
 async def _run(args: argparse.Namespace) -> None:
 	backend = readBackendConfig()
 	runner = Runner(args, backend)
-	if not runner.children:
+	if runner.backendChild is None and runner.frontendChild is None:
 		print('[run] nothing to supervise (--no-backend and --no-frontend)')
 		return
 
@@ -569,6 +592,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 		'--no-capture', action='store_true',
 		help="Let children write straight to this terminal without capturing to a file",
 	)
+	parser.add_argument('--no-history', action='store_true', help='Do not start the history database ([History] in the config)')
 	parser.add_argument('--no-backend', action='store_true', help='Supervise only the frontend')
 	parser.add_argument('--no-frontend', action='store_true', help='Supervise only the backend')
 	parser.add_argument(

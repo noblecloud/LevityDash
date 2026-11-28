@@ -6,6 +6,7 @@ from rich.pretty import pretty_repr
 
 from LevityDash.lib.config import userConfig
 from LevityDash.lib.plugins.schema import LevityDatagram
+from LevityDash.lib.plugins import history
 from LevityDash.lib.plugins.web import Endpoint, Web
 from LevityDash.lib.plugins.web.errors import APIError, InvalidCredentials, RateLimitExceeded, RequestTimeout
 
@@ -36,6 +37,28 @@ class REST(Web, prototype=True):
 					self.pluginLog.error(f'API Error {response.status} {response.reason}: {error[:300]}')
 					raise APIError(response)
 
+	_goodFetches: set
+
+	def __rawName(self, endpoint) -> str:
+		return str(getattr(endpoint, 'name', None) or endpoint)
+
+	def __rememberData(self, endpoint, data) -> None:
+		if not hasattr(self, '_goodFetches'):
+			self._goodFetches = set()
+		self._goodFetches.add(self.__rawName(endpoint))
+		history.recordRaw(self, self.__rawName(endpoint), data)
+
+	def __storedData(self, endpoint):
+		"""The newest stored response, only while this run has not had a good one for the endpoint."""
+		name = self.__rawName(endpoint)
+		if name in getattr(self, '_goodFetches', ()):
+			return None
+		if (stored := history.latestRaw(self, name)) is None:
+			return None
+		when, data = stored
+		self.pluginLog.warning(f'{self.name}: {name} could not be fetched; using the response stored {when.astimezone():%Y-%m-%d %H:%M}')
+		return data
+
 	async def getData(self, endpoint: Endpoint, **kwargs) -> LevityDatagram:
 		if not userConfig.locationKnown:
 			# Weather for 0,0 (the Gulf of Guinea) looks plausible and is wrong. Ask for nothing.
@@ -54,7 +77,15 @@ class REST(Web, prototype=True):
 			headers.update(kwargs.get('headers', {}))
 
 		try:
-			data = await self.__getData(url, params, headers)
+			try:
+				data = await self.__getData(url, params, headers)
+			except Exception:
+				# Nothing came back and nothing has this run: the last stored response (a display that boots before its
+				# wifi is up) is better than a blank dashboard. It is parsed as if it had just arrived.
+				if (data := self.__storedData(endpoint)) is None:
+					raise
+			else:
+				self.__rememberData(endpoint, data)
 			datagram = LevityDatagram(
 				self.normalizeData(data),
 				schema=self.schema,
