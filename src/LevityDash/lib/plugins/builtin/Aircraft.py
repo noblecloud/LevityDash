@@ -221,7 +221,7 @@ def slotValues(rows: List[Dict[str, Any]], slots: int, previous: int = 0) -> Dic
 			for field in ('callsign', 'type', 'registration', 'category', 'path'):
 				out[f'aircraft.{n}.{field}'] = rows[n - 1].get(field, '')
 		elif n <= previous:
-			for field in ('callsign', 'type', 'registration', 'category'):
+			for field in ('callsign', 'type', 'registration', 'category', 'path'):
 				out[f'aircraft.{n}.{field}'] = ''
 			for field in ('bearing', 'distance', 'altitude', 'speed', 'climb', 'heading', 'straight', 'eta'):
 				out[f'aircraft.{n}.{field}'] = 0
@@ -430,6 +430,7 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 		self.schema, self._sourceKeys = buildSchema({'keys': {k: dict(v) for k, v in AIRCRAFT_KEYS.items()}}, epoch=True)
 		super().__init__()
 		self._previous = 0
+		self._lastGood: Optional[float] = None
 		self._lastNear: Optional[float] = None
 		self._next: Optional[float] = None
 		self._approaching = 0
@@ -568,6 +569,10 @@ class Aircraft(LifecyclePlugin, realtime=True, hourly=False, logged=False):
 	def publishRows(self, rows: Optional[List[Dict[str, Any]]]) -> None:
 		"""Publish a reading. ``None`` is a failed fetch: the slots stay as they were and only ``active`` is brought up to date."""
 		now = time.monotonic()
+		if rows is not None:
+			self._lastGood = now
+		elif self._previous and self._lastGood is not None and now - self._lastGood > max(60.0, 3 * self.interval):
+			rows = []  # the feed has been dead long enough that what is on the slots is history: clear them
 		near = overhead(rows or [], self._number('trigger_radius', 10), self._number('trigger_altitude', 0))
 		active, self._lastNear = holdActive(near, now, self._lastNear, self._number('hold', 60))
 		values = {'aircraft.near': near, 'aircraft.active': active} if rows is None else {

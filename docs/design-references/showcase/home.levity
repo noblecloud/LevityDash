@@ -4612,7 +4612,7 @@ items:
                 right: 10%
                 top: 0
                 bottom: 0
-            format-hint: AAL000
+            format-hint: AAL0000
           geometry:
             x: 0.0%
             y: 90.734%
