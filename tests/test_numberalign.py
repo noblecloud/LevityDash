@@ -80,3 +80,45 @@ def test_anchored():
 	assert not numberalign.anchored('WSW', 'special:1')
 	assert numberalign.anchored('Mon.', 'char:.')
 	assert numberalign.anchored('44', 'char:.'), 'digits fall back to the end of the digits'
+
+
+@pytest.mark.parametrize('text, mode, head, tail', [
+	# the first match, the Nth, the last
+	('72.4°', r'match:\d+', '', '72.4°'),
+	('72.4°', r'match:\d+@2', '72.', '4°'),
+	('72.4°', r'match:\d+@-1', '72.', '4°'),
+	('1,234.5', r'match:\d+@-2', '1,', '234.5'),
+	('Mon 12 Jan', r'match:[A-Z][a-z]+@2', 'Mon 12 ', 'Jan'),
+	('9 of 12', r'match:of', '9 ', 'of 12'),
+	# an empty match is skipped
+	('abc', r'match:x*', 'abc', ''),
+	# a pattern with an @ in it still takes the count off the end
+	('a@b c@b', r'match:@b@2', 'a@b c', '@b'),
+	# no such match: back to the end of the digits
+	('44%', r'match:\.\d', '44', '%'),
+	('WSW', r'match:\d', 'WSW', ''),
+	('5 mi', r'match:\d+@3', '5', ' mi'),
+])
+def test_split_match(text, mode, head, tail):
+	assert numberalign.split(text, mode) == (head, tail)
+	assert ''.join(numberalign.split(text, mode)) == text
+
+
+@pytest.mark.parametrize('spec, canonical', [
+	(r'match:\d+', r'match:\d+'), (r'match:\d+@1', r'match:\d+'), (r'match:\d+@-1', r'match:\d+@-1'),
+	(r'match:X', r'match:X'),
+	({'match': r'\d+'}, r'match:\d+'), ({'match': r'\d+', 'occurrence': 2}, r'match:\d+@2'),
+])
+def test_parse_match(spec, canonical):
+	assert numberalign.parse(spec) == canonical
+
+
+@pytest.mark.parametrize('spec', ['match:', 'match:(', r'match:\d@0', {'match': '['}, {'match': 'a', 'nth': 1}])
+def test_parse_match_refuses(spec):
+	with pytest.raises(ValueError):
+		numberalign.parse(spec)
+
+
+def test_anchored_match():
+	assert numberalign.anchored('Mon 12', r'match:[A-Z]')
+	assert not numberalign.anchored('WSW', r'match:\d')

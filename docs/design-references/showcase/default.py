@@ -243,13 +243,13 @@ def room(caption, sfx, color, x, y, w, h, i):
 		        num(k, g(xr, ry + CAP + 0.3, wr * 0.68, 4.2), c, group='global.side', align='TopLeft', weight='Medium', font=TEMP_FONT,
 		            hint=hint, unit='Inline')]
 		# The last day's high over its low, small, in the space after the number: a faint up or down arrow, then the value.
-		xh, wh, lh = xr + wr * 0.7, wr * 0.3, 2.0
+		xh, wh, lh = xr + wr * 0.68, wr * 0.32, 2.6
 		for j, (arrow, fn) in enumerate((('vec:arrow-up', 'max'), ('vec:arrow-down', 'min'))):
 			yy = ry + CAP + 0.3 + j * (lh + 0.2)
 			# Arrow and number both sit on the bottom of their boxes, so they share a baseline (a vector glyph stands on the
 			# baseline, a cap height tall). The digits end on one line (a 100% over an 85% keeps its % in line).
-			out += [text('x', g(xh, yy + lh - 1.45, 0.8, 1.25), color='$faint', align='BottomLeft', group='global.hlmark', icon=arrow),
-			        num(f'{fn}({k}, 24h)', g(xh + 0.8, yy, wh - 0.8, lh), '$muted', group='global.hl', align='BottomLeft', font=TEMP_FONT,
+			out += [text('x', g(xh, yy + lh - 1.6, 1.0, 1.55), color='$faint', align='BottomLeft', group='global.hlmark', icon=arrow),
+			        num(f'{fn}({k}, 24h)', g(xh + 1.0, yy, wh - 1.0, lh), '$muted', group='global.hl', align='BottomLeft', font=TEMP_FONT,
 			            weight='Medium', hint=hint, unit='Inline', **{'number-align': 'end'})]
 	return out
 
@@ -278,10 +278,10 @@ def board(rooms=INDOOR):
 		num(T, g(x, 4.6, 15.4, 15.6), {'scale': '$temperature', 'of': T}, unit='Inline', hint='00°', weight='Black', tracking=-0.04, font=TEMP_FONT,
 		    **tempAxes(500, 800), **{'fill-gradient': {'scale': '$temperature', 'of': T, 'spread': '5°F', 'angle': 180}}),
 		cap_('HIGH', g(x + 16.6, 2.8, 7, CAP)),
-		num('environment.temperature.high', g(x + 16.6, 4.6, 8, 5.8), '$bad', hint='00', weight='Bold', group='global.room',
+		num('environment.temperature.high', g(x + 16.6, 5.5, 8, 5.8), '$bad', hint='00', weight='Bold', group='global.room',
 		    fmt={'unit_symbol': False}, font=TEMP_FONT, **tempAxes()),
 		cap_('LOW', g(x + 16.6, 12.0, 7, CAP)),
-		num('environment.temperature.low', g(x + 16.6, 13.8, 8, 5.8), '$info', hint='00', weight='Bold', group='global.room',
+		num('environment.temperature.low', g(x + 16.6, 14.7, 8, 5.8), '$info', hint='00', weight='Bold', group='global.room',
 		    fmt={'unit_symbol': False}, font=TEMP_FONT, **tempAxes()),
 		# The day's low to high on a 30 to 100 °F track, the temperature now as a line across it.
 		bar(T, g(x, 20.9, 24.6, 2.2), 30, 100, track={'weight': '42%', 'color': '$rule'},
@@ -310,8 +310,8 @@ def board(rooms=INDOOR):
 		bar('astronomy.sun.remaining', g(x, 21.2, 18, 2.2), 0, 960, track={'weight': '100%', 'color': '$rule', 'segments': 16, 'gap': '18%'},
 		    fill={'gradient': {0: '$accent', 1: '$warn'}, 'segments': 16, 'gap': '18%', 'weight': '100%', 'glow': GLOW}),
 		*tile('SUNRISE', f'{L}.sunrise', x + 19.8, 2.8, 9.6, '$warn', fmt='%-I:%M', hint='0:00', right=True),
-		text('x', g(x + 21.4, 2.8 + CAP + 1.0, 2.6, TILE), color='$warn', align='CenterRight', icon='wi:sunrise'),
-		text('x', g(x + 21.4, 10.4 + CAP + 1.0, 2.6, TILE), color='$accent', align='CenterRight', icon='wi:sunset'),
+		text('x', g(x + 21.0, 2.8 + CAP + 0.4, 2.6, TILE), color='$warn', align='CenterRight', icon='mdi:weather-sunset-up'),
+		text('x', g(x + 21.0, 10.4 + CAP + 0.4, 2.6, TILE), color='$accent', align='CenterRight', icon='mdi:weather-sunset-down'),
 		*tile('SUNSET', f'{L}.sunset', x + 19.8, 10.4, 9.6, '$accent', fmt='%-I:%M', hint='0:00', right=True),
 		*tile('SUN · W/M²', f'{L}.irradiance.irradiance', x + 19.8, 18.0, 9.6, '$warn', hint='000', right=True),
 	]
@@ -320,14 +320,14 @@ def board(rooms=INDOOR):
 		'type': 'graph', 'name': 'forecast', 'geometry': g(1.5, 28.5, 69.5, 37),
 		'timeframe': {'days': 2, 'hours': 18, 'offset': {'hours': -6}},
 		'annotations': {'dayLabels': {'position': 'Center', 'alignment': 'Center', 'opacity': '12%', 'height': '38%'},
-		                'hourLabels': {'alignment': 'BottomCenter', 'spacingIntervals': '6, 12', 'height': '4%'},
+		                'hourLabels': {'alignment': 'BottomCenter', 'spacingIntervals': '6, 12', 'height': '7.5%'},
 		                'lines': {'spacing': '12 mm', 'weight': 0.4}},
 		'figures': [
-			{'figure': 'sky', 'margins': {'top': '3%', 'bottom': '87%'},
+			{'figure': 'sky', 'margins': {'top': '9%', 'bottom': '81%'},
 			 'environment.temperature.dewpoint': {'plot': {'type': 'strip', 'pins': {
 				 'key': PR, 'size': 30, 'at': 0.5, 'color': '$info', 'spacing': 3.2,
 				 'steps': [[0, 'wi:day-cloudy'], [0.02, 'wi:sprinkle'], [0.1, 'wi:showers'], [0.2, 'wi:rain']]}}}},
-			{'figure': 'arrows', 'margins': {'top': '13%', 'bottom': '80%'},
+			{'figure': 'arrows', 'margins': {'top': '19%', 'bottom': '75%'},
 			 'environment.temperature.dewpoint': {'plot': {'type': 'strip', 'pins': {
 				 'key': f'{W}.direction.direction', 'glyph': 'wi:direction-up', 'rotate': 180, 'size': 24, 'at': 0.5, 'spacing': 3.4, 'color': '$faint'}}}},
 			{'figure': 'temperature', 'margins': {'top': '28%', 'bottom': '30%'},
@@ -335,16 +335,16 @@ def board(rooms=INDOOR):
 			     'plot': {'type': 'plot', 'gradient': 'TemperatureGradient', 'weight': 1.0, 'glow': GLOW, 'fill': {'opacity': 0.35, 'fade': True}}, 'resolution': 2},
 			 'environment.temperature.feelsLike': {'plot': {'type': 'plot', 'gradient': 'TemperatureGradient', 'weight': 0.3, 'opacity': 0.6}},
 			 'environment.temperature.dewpoint': {'plot': {'type': 'plot', 'color': '$good', 'dashPattern': '5, 5', 'weight': 0.35, 'cap': 'square'}}},
-			{'figure': 'clouds', 'margins': {'top': '72%', 'bottom': '9%'}, 'min': 0, 'max': 1,
+			{'figure': 'clouds', 'margins': {'top': '72%', 'bottom': '1%'}, 'min': 0, 'max': 1,
 			 f'{C}.cover': {'plot': {'type': 'plot', 'color': '$faint', 'weight': 0.3, 'opacity': 0.6, 'fill': {'opacity': 0.12, 'fade': True}}}},
-			{'figure': 'rain', 'margins': {'top': '70%', 'bottom': '9%'}, 'min': 0, 'max': 0.4,
+			{'figure': 'rain', 'margins': {'top': '70%', 'bottom': '1%'}, 'min': 0, 'max': 0.4,
 			 PR: {'plot': {'type': 'bar', 'color': '$info', 'width': 0.62, 'radius': 0.5, 'glow': GLOW}, 'smooth': False}},
 		]})
 	# ------------------------------------------------------------ indoors
 	top, height, gap = 28.5, 37, 2.2
 	each = (height - gap * (len(rooms) - 1)) / len(rooms)
 	for i, (caption, sfx, color) in enumerate(rooms):
-		B += room(caption, sfx, color, 74.5, top + i * (each + gap), 23.5, each, i)
+		B += room(caption, sfx, color, 72.5, top + i * (each + gap), 25.5, each, i)
 	# ------------------------------------------------------------ five cards
 	# Each card: a caption, the hero at room size, a picture of its last or next day, and six readings at detail size.
 	Y, H, CW, GAP = 68.5, 29.5, 18.24, 1.2

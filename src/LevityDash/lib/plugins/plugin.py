@@ -427,16 +427,21 @@ class Plugin(metaclass=PluginMeta):
 
 	@classmethod
 	def getDefaultConfig(cls, plugin: 'Plugin', destination: EasyPath | EasyPathFile = None, replace: bool = True):
-		"""Gets the default config from the plugin's __defaultConfig__ attribute and places it in the config directory"""
+		"""Gets the default config from the plugin's __defaultConfig__ attribute and places it in the config directory.
+
+		The file is named for the class, as `getConfig` looks for it: `cls.name` is a property on a plugin
+		(Govee names each instance after its device), so on the class it is a property object and gave files
+		called `<property object at 0x...>.ini`.
+		"""
 		if destination is None:
-			destination = EasyPathFile(pluginConfig.userPluginsDir.path / f'{cls.name}.ini', make=True)
+			destination = EasyPathFile(pluginConfig.userPluginsDir.path / f'{cls.__name__}.ini', make=True)
 		elif isinstance(destination, str | Path):
 			destination = EasyPath(destination)
 
 		if not destination.parent in pluginConfig.userPluginsDir:
 			destination = pluginConfig.userPluginsDir / destination
 		if not isinstance(destination, EasyPathFile):
-			destination /= f'{cls.name}.ini'
+			destination /= f'{cls.__name__}.ini'
 
 		config = cls.__defaultConfig__
 		if isinstance(config, Path) and config.exists() and config.is_file() and config.endswith('.ini'):

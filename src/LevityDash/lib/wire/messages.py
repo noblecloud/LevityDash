@@ -101,7 +101,7 @@ def apply_container_update(remoteContainer: RemoteContainer, incoming: dict) -> 
 
 # --- envelope level: a full 'update' message wrapping per-key container dicts ---
 
-def encode_update_message(*, name: str, defaultFor=None, enabled: bool = True, running: bool = True, updates: dict) -> dict:
+def encode_update_message(*, name: str, defaultFor=None, enabled: bool = True, running: bool = True, priority: float = 0, maxAge=None, updates: dict) -> dict:
 	"""Wrap already-encoded container dicts in a full 'update' wire message.
 
 	``updates`` maps ``str(key) -> encode_container(container)``. Kept separate
@@ -116,6 +116,8 @@ def encode_update_message(*, name: str, defaultFor=None, enabled: bool = True, r
 			'defaultFor': sorted(defaultFor or ()),
 			'enabled': bool(enabled),
 			'running': bool(running),
+			'priority': priority,
+			'maxAge': maxAge.total_seconds() if maxAge is not None else None,
 		},
 		'updates': updates,
 	}

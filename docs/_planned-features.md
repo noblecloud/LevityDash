@@ -74,7 +74,7 @@ Consider making graph annotations an -item instead of a attr
 
 Cache graph renders
 
-WeatherUnits get conversion factor
+UnitCorn get conversion factor
 
 Pickle all items on close and load them on start and update with yaml state
 

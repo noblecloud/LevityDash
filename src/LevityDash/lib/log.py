@@ -98,13 +98,19 @@ class StatusBarHandler(logging.Handler):
 		if record.levelno < 1:
 			return
 		try:
-			self.statusBar.showMessage(f'{datetime.fromtimestamp(int(record.created)):%X} | {record.getMessage()}')
+			if (bar := self.statusBar) is not None:
+				bar.showMessage(f'{datetime.fromtimestamp(int(record.created)):%X} | {record.getMessage()}')
 		except Exception:
 			pass
 
 	@property
-	def statusBar(self) -> QStatusBar:
-		return getattr(lvdash, 'status_bar', None) or QApplication.instance().activeWindow().statusBar()
+	def statusBar(self) -> QStatusBar | None:
+		# The focused window's bar, else nothing: `activeWindow()` is None with no focus (a fresh launch, or
+		# a click on another app), and asking it for a status bar raised inside the log handler.
+		if (bar := getattr(lvdash, 'status_bar', None)) is not None:
+			return bar
+		window = QApplication.instance().activeWindow()
+		return window.statusBar() if window is not None else None
 
 
 

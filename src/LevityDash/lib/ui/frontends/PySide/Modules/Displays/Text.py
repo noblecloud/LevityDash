@@ -576,6 +576,40 @@ class Text(QGraphicsPathItem):
 		self._outline = value or None
 		self._applyInk()
 
+	# -- change-animation (lib/ui/value_change.py, frontends/PySide/valuechange.py) --
+
+	_changeSpec = None
+	_changeAnimator = None
+	_builtText: Optional[str] = None
+	_shownTransform: Optional[QTransform] = None
+	#: Texts that stand for "no value yet": changing from or to one of them never animates.
+	_PLACEHOLDERS = frozenset({'', '-', '\u2013', '\u2014', '...', '\u2026', '?'})
+
+	def setChangeAnimation(self, spec):
+		"""How the text moves when the value it shows changes: a `ChangeSpec`, or `None` to replace it at once."""
+		self._changeSpec = spec
+		if spec is None and (animator := self._changeAnimator) is not None:
+			animator.stop()
+
+	def _changeBefore(self):
+		"""The look to animate away from, or `None` when a change now should not animate."""
+		from LevityDash.lib.ui.frontends.PySide.valuechange import ChangeAnimator, enabled
+		old = self._builtText
+		if old is None or old in self._PLACEHOLDERS or self.path().isEmpty() or self.scene() is None or not self.isVisible():
+			return None
+		if not enabled():
+			return None
+		return ChangeAnimator.capture(self, old, self._shownTransform)
+
+	def _changeAfter(self, before, text):
+		self._builtText = text if self.icon is None else None
+		if before is None or text == before.text or self._builtText is None or text in self._PLACEHOLDERS:
+			return
+		from LevityDash.lib.ui.frontends.PySide.valuechange import ChangeAnimator
+		if (animator := self._changeAnimator) is None:
+			animator = self._changeAnimator = ChangeAnimator(self)
+		animator.start(self._changeSpec, before, text)
+
 	def _applyInk(self):
 		"""Brush and pen from the fill colour and `outline`. With no outline the glyphs are filled and
 		there is no pen, as before."""
@@ -967,6 +1001,9 @@ class Text(QGraphicsPathItem):
 
 		self.setTransform(transform)
 		self._applyWarp()
+		if self._changeSpec is not None:
+			# updateTransform starts from identity, so the look a change animates away from is kept here
+			self._shownTransform = QTransform(self.transform())
 		if not self._fixedFontSize and (scale := transform.m11()) > 0:
 			before, self._fitScale = self._decimalRatio(self.font()), scale
 			after = self._decimalRatio(self.font())
@@ -1615,6 +1652,7 @@ class Text(QGraphicsPathItem):
 				group.mark_dirty()
 
 	def _update_path(self, /, update_others: bool = False) -> QRectF:
+		before = self._changeBefore() if self._changeSpec is not None else None
 		self.resetTransform()
 		self._pickAlternate()
 		font = self.font()
@@ -1906,6 +1944,7 @@ class Text(QGraphicsPathItem):
 			self._applyAnimatedGlyph(*animated)
 		else:
 			self._stopAnimatedGlyph()
+		self._changeAfter(before, text)
 
 		if update_others and (group := getattr(self, '_sized', None)) is not None:
 			group: 'SizeGroup'

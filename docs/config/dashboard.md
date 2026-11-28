@@ -47,6 +47,7 @@ These pages cover the properties that work on a whole dashboard:
 - [Split](/config/dashboard/split.md): two items either side of a divider that you can drag.
 - [Flex and grid](/config/dashboard/layout.md): CSS flexbox and grid layout for stacks.
 - [Studio](/config/dashboard/studio.md): the editor for dashboard files, with its item tree, groups and zoom.
+- [Opening a dashboard](/config/dashboard/opening.md): the configured one, a file for one run, or a handoff to the window that is already open.
 
 ## Shared Properties
 
@@ -464,22 +465,23 @@ This property is used to override the string used for sizing/alignment. If you l
 For example, wind speed frequently changes between 0 and some non-zero float causing the text to constantly resize.
 To fix this, `format-hint` can be set to `'10.0'`.  Note, the quotes are required, without the quotes, the value will be interpreted as a float and the decimal will be dropped.  Since this string will be used to determine the size of the text, it is important that the string is the same length as the longest string that will be displayed.
 
-#### <div class=mono>number-align: end | decimal | char:X | nth:N | special:N </div>
+#### <div class=mono>number-align: end | decimal | char:X | nth:N | special:N | match:REGEX </div>
 
 Lines a column of values up on the number and not on the whole string. Without it a `72.4°` and a `44%` in one column end at the same edge, so their digits do not line up.
 
 - `decimal` puts every decimal point on one vertical line. A value with no point is treated as if the point sat just after its last digit, so `44%` and `0` line up with `72.4°` on the digits to the left of the point.
 - `end` right-aligns the digits. Everything after the last digit (the unit, a `%`, a `°`) hangs to the right.
 
-Three modes let you pick the anchor yourself, as the character the line runs through (CSS `text-align: "."` is the model). The anchor starts on the line, so the text before it sits to the left and the anchor and everything after it hang to the right:
+Four modes let you pick the anchor yourself, as the character the line runs through (CSS `text-align: "."` is the model). The anchor starts on the line, so the text before it sits to the left and the anchor and everything after it hang to the right:
 
 | value | anchors on |
 | --- | --- |
 | `char:X` | the first `X` (`char::` for a colon, `char:%`); `char:X@2` the second, `char:X@-1` the last |
 | `nth:N` | the Nth character, 1 is the first; `nth:-1` the last one |
 | `special:N` | the Nth special character: not a digit, a letter or a space (so `.` `,` `:` `/` `%` `°`); a leading sign does not count; `special:-1` the last |
+| `match:REGEX` | the start of the first match of a regular expression; `match:REGEX@N` the Nth match, `@-1` the last. `match:\d+@2` anchors on the second run of digits, `match:[A-Z]@-1` on the last capital. Empty matches are skipped, and the `@N` is read off the end so the pattern may contain `@` |
 
-A value without the anchor falls back to `end` (cut after its last digit), so a `44%` still lines up in a column of `72.4°` under `special:1`, and a value with no digit and no anchor keeps its plain placement. A mapping works too: `{char: ':', occurrence: 2}`, `{nth: 3}`, `{special: -1}`. Each value is measured in its own font, so the anchors still meet when `font-axes` or `heat-weight` give the values different weights, and with `decimal-scale` small digits. The anchors are lined up across everything in the column, so a `special:1` label next to a `special:1` label in the same stack and size group shares the x.
+A value without the anchor falls back to `end` (cut after its last digit), so a `44%` still lines up in a column of `72.4°` under `special:1`, and a value with no digit and no anchor keeps its plain placement. A mapping works too: `{char: ':', occurrence: 2}`, `{nth: 3}`, `{special: -1}`, `{match: '\d+', occurrence: 2}`. Each value is measured in its own font, so the anchors still meet when `font-axes` or `heat-weight` give the values different weights, and with `decimal-scale` small digits. The anchors are lined up across everything in the column, so a `special:1` label next to a `special:1` label in the same stack and size group shares the x.
 
 The text is never changed: nothing is padded and no decimals are added, so `0` stays `0` and `0.0` stays `0.0`. A value with no digit (a compass point such as `WSW`) is not a number and keeps its normal alignment.
 
@@ -498,6 +500,25 @@ The column is as wide as the widest head plus the widest tail in it, and the tex
 #### <div class=mono>tabular: bool </div>
 
 Digits of one width (CSS `font-variant-numeric: tabular-nums`). Implied by `number-align`. The bundled Nunito, Roboto and Roboto Mono already set every digit to one width, so it only matters for a font that does not.
+
+#### <div class=mono>change-animation: none | fade | slide | flash </div>
+
+How the text moves when the value it shows changes. Off (`none`) unless a dashboard asks.
+
+- `fade`: the old text fades out while the new one fades in.
+- `slide`: the old text leaves and the new one arrives a short way along the vertical: upward when the number rose, downward when it fell (a text with no number goes up). With the theme's `motion: spring` it passes its place a little and settles.
+- `flash`: the new text shows at once and glows in the theme's `accent` for a moment.
+
+A time may follow the style (`slide 500ms`), or write `{style: fade, duration: 0.6s}`. The default is 350ms, the most 2s. The first value after a load never animates, nor does a change from or to the `-` placeholder. Set it for every reading in a container through `shared:`:
+
+```yaml
+shared:
+  display:
+    valueLabel:
+      change-animation: slide
+```
+
+Only the changed item repaints while it runs, and only for its duration, so a dashboard whose values change once a minute pays nothing between changes. `LEVITY_CHANGE_ANIMATION=0` in the environment turns every change animation off (for an A/B on a slow display).
 
 #### <div class=mono>convertTo: str </div>
 

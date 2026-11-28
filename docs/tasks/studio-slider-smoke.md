@@ -36,13 +36,13 @@ Activity rings, Thermostat, System, Pressure, Solar, CPU temp.
 
 Fail (17):
 - 16 cells: `TypeError: 'NoneType' object is not callable`. The gauge's key has no
-  WeatherUnits class in the studio, so a numeric field (`GaugeRange.min`/`.max`, or
+  UnitCorn class in the studio, so a numeric field (`GaugeRange.min`/`.max`, or
   `Graduations.usr_interval`) is decoded against `gauge.valueClass = None` and
   `decode_measurement` calls `None(value)` (`meter/scale.py:121` ->
-  `WeatherUnits/__init__.py:76`). Cells: Wind, Drive, Water, Washer, Air quality, UV index,
+  `unitcorn/__init__.py:76`). Cells: Wind, Drive, Water, Washer, Air quality, UV index,
   Fuel, Energy, Timer, Heart rate, Coolant, Sun, Clock, Clock, Engine, Download.
 - 1 cell: Rain rate — `NotImplementedError: Multi-Unit values are not supported yet`
-  (`WeatherUnits/__init__.py:78`).
+  (`unitcorn/__init__.py:78`).
 
 **Verdict:** 13/30 showcase cells load, with the same 17 failures in the meter tree and
 upstream a31af10 — pre-existing, not a property of this branch.
@@ -104,7 +104,7 @@ preset cannot load in the studio at all: its `range: {min: 7.52, max: 19.15}` is
 against `gauge.valueClass = None` before the studio assigns the value class
 (`_studio_stage.StudioGauge.build` sets `valueClass` *after* `Gauge(...)` returns), so loading
 raises `TypeError: 'NoneType' object is not callable` (`meter/meter.py:151` /
-`Gauge.py` equivalent -> `scale.py:121` -> `WeatherUnits/__init__.py:76`). Removing
+`Gauge.py` equivalent -> `scale.py:121` -> `unitcorn/__init__.py:76`). Removing
 `minor.interval` does not help; the range decode fails. Same in both trees. So the sun-path
 fill item itself is never reachable.
 

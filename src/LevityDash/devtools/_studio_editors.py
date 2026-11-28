@@ -753,7 +753,7 @@ class AnchorEdit(ChoiceEdit):
 	def __init__(self, choices: List[tuple]):
 		super().__init__(choices, editable=True)
 		self._good = None
-		self.combo.lineEdit().setPlaceholderText('char:X  nth:N  special:N')
+		self.combo.lineEdit().setPlaceholderText('char:X  nth:N  special:N  match:REGEX')
 
 	def setValue(self, value):
 		self._good = value

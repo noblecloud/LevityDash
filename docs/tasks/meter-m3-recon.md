@@ -176,7 +176,7 @@ uses 44 outside names:
     Color, Gradient     from LevityDash.lib.ui
     DebugPaint, addPath, outline_path   from ...PySide.utils
     DimensionType, Size, parseWidth     from LevityDash.lib.ui.Geometry
-    Length              from WeatherUnits
+    Length              from unitcorn
     Optional            from typing
     QBrush, QColor, QPainter, QPainterPath, QPen, Qt   from PySide6.QtGui
     QPoint, QPointF, QRectF                            from PySide6.QtCore

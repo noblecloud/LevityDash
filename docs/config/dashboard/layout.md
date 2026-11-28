@@ -124,7 +124,7 @@ An item that shows a number reports its size from its **format hint**, the wides
 - A cell sizes its own text. To make the values in a grid or flex stack the same size, add a `shared:` size group (see the example dashboard).
 - Not yet supported: `subgrid`, named lines, math functions in `size:`, `geometry:` and `spacing:` (only `flex:` and `grid:` take them), and sizing by anything but the text of a value (a gauge, a graph or a container has no content size, so for them `auto` is 0).
 
-Example dashboards: `docs/design-references/grid-areas.levity` (named areas), the glance and homelab dashboards in `docs/design-references/dashboards/` (areas replacing hand-placed boxes), `docs/design-references/layout-margins.levity` (margins), `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`) and `docs/design-references/grid-bento.levity`, a dense bento board with spans, a `shrink` item and an `auto-fill` strip.
+Example dashboards: `docs/design-references/grid-areas.levity` (named areas), the glance and homelab dashboards in `docs/design-references/dashboards/` (areas replacing hand-placed boxes), `docs/design-references/layout-margins.levity` (margins), `docs/design-references/css-layout.levity` (render: `docs/design-references/css-layout.png`) and `docs/design-references/grid-bento.levity`, a dense bento board with spans, a `shrink` item and an `auto-fill` strip. `docs/design-references/grid-packing.levity` puts four boards side by side to show what placement does with cards of different sizes: sparse against dense, `auto-flow: column`, and `repeat(auto-fit, …)` wrapping.
 
 ## In the Studio
 

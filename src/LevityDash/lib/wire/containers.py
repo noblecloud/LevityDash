@@ -199,8 +199,10 @@ class _RemoteConfig:
 	"""Stand-in for the slice of `PluginConfig` that reconciliation reads:
 	`defaultFor` (source-priority tie-breaking) and `['enabled']`."""
 
-	def __init__(self, defaultFor: Optional[Set[str]] = None, enabled: bool = True):
+	def __init__(self, defaultFor: Optional[Set[str]] = None, enabled: bool = True, priority: float = 0, maxAge: Optional[timedelta] = None):
 		self.defaultFor = defaultFor or set()
+		self.priority = priority
+		self.maxAge = maxAge
 		self._enabled = enabled
 
 	def __getitem__(self, key):
@@ -225,10 +227,10 @@ class RemoteSource:
 
 	def __init__(
 		self, name: str, defaultFor: Optional[Set[str]] = None, enabled: bool = True, running: bool = True,
-		ts_request_fn: Optional[Callable[[dict, Callable], None]] = None,
+		priority: float = 0, maxAge: Optional[timedelta] = None, ts_request_fn: Optional[Callable[[dict, Callable], None]] = None,
 	):
 		self.name = name
-		self.config = _RemoteConfig(defaultFor=defaultFor, enabled=enabled)
+		self.config = _RemoteConfig(defaultFor=defaultFor, enabled=enabled, priority=priority, maxAge=maxAge)
 		self.running = running
 		self.publisher = RemotePublisher(self)
 		self._containers: Dict[CategoryItem, 'RemoteContainer'] = {}

@@ -202,7 +202,7 @@ the infrastructure that HA and openHAB lack:
    `unknown` unless every member shares a unit; openHAB's `SUM` has an open
    bug ([openhab-core#2449](https://github.com/openhab/openhab-core/issues/2449))
    silently dropping the unit-of-measure. Neither converts automatically.
-   LevityDash has WeatherUnits and can simply convert to a common unit first —
+   LevityDash has UnitCorn and can simply convert to a common unit first —
    a genuine differentiator, not a nice-to-have.
 2. **Staleness — bound it.** *None* of these systems timestamp-align members;
    the aggregate is computed from whatever each member's current state is,

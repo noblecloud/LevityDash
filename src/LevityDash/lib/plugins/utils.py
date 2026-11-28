@@ -27,6 +27,12 @@ if TYPE_CHECKING:
 	from LevityDash.lib.plugins.observation import Observation
 	from LevityDash.lib.plugins import Plugin
 
+class DailyRadiation(wu.others.light.Light):
+	"""Energy that reached a square metre over a day (Open-Meteo's `shortwave_radiation_sum`)."""
+	_unit = 'MJ/m²'
+	_id = 'MJ/m^2'
+
+
 unitDict: Dict[
 	str, Union[Type[wu.Measurement], Type[bool], Dict[str, Union[Type[wu.Measurement], Type[wu.DerivedMeasurement]]]]] = {
 	'f':                wu.temperature.Fahrenheit,
@@ -45,6 +51,7 @@ unitDict: Dict[
 	'mmHg':             wu.pressure.MillimeterOfMercury,
 	'inHg':             wu.pressure.InchOfMercury,
 	'W/m^2':            wu.others.light.Irradiance,
+	'MJ/m^2':           DailyRadiation,
 	'lux':              wu.others.light.Illuminance,
 	'W':                wu.Power.Watt,
 	'kW':               wu.Power.Kilowatt,

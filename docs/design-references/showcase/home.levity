@@ -201,7 +201,7 @@ items:
         unit_symbol: false
     geometry:
       x: 56.1%
-      y: 4.6%
+      y: 5.5%
       width: 8%
       height: 5.8%
     margins:
@@ -264,7 +264,7 @@ items:
         unit_symbol: false
     geometry:
       x: 56.1%
-      y: 13.8%
+      y: 14.7%
       width: 8%
       height: 5.8%
     margins:
@@ -643,11 +643,11 @@ items:
     color: $warn
     alignment: CenterRight
     geometry:
-      x: 89.9%
-      y: 5.3%
+      x: 89.5%
+      y: 4.7%
       width: 2.6%
       height: 3.6%
-    icon: wi:sunrise
+    icon: mdi:weather-sunset-up
   - type: text
     text: x
     font: $display
@@ -655,11 +655,11 @@ items:
     color: $accent
     alignment: CenterRight
     geometry:
-      x: 89.9%
-      y: 12.9%
+      x: 89.5%
+      y: 12.3%
       width: 2.6%
       height: 3.6%
-    icon: wi:sunset
+    icon: mdi:weather-sunset-down
   - type: text
     text: SUNSET
     font: Barlow Condensed
@@ -776,15 +776,15 @@ items:
       hourLabels:
         alignment: BottomCenter
         spacingIntervals: 6, 12
-        height: 4%
+        height: 7.5%
       lines:
         spacing: 12 mm
         weight: 0.4
     figures:
     - figure: sky
       margins:
-        top: 3%
-        bottom: 87%
+        top: 9%
+        bottom: 81%
       environment.temperature.dewpoint:
         plot:
           type: strip
@@ -805,8 +805,8 @@ items:
               - wi:rain
     - figure: arrows
       margins:
-        top: 13%
-        bottom: 80%
+        top: 19%
+        bottom: 75%
       environment.temperature.dewpoint:
         plot:
           type: strip
@@ -850,7 +850,7 @@ items:
     - figure: clouds
       margins:
         top: 72%
-        bottom: 9%
+        bottom: 1%
       min: 0
       max: 1
       environment.clouds.cover.cover:
@@ -865,7 +865,7 @@ items:
     - figure: rain
       margins:
         top: 70%
-        bottom: 9%
+        bottom: 1%
       min: 0
       max: 0.4
       environment.precipitation.precipitation:
@@ -883,9 +883,9 @@ items:
     color: $series-2
     alignment: BottomLeft
     geometry:
-      x: 74.5%
+      x: 72.5%
       y: 28.5%
-      width: 23.5%
+      width: 25.5%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -896,7 +896,7 @@ items:
     key: indoor.battery.battery#bedroom
     title: false
     geometry:
-      x: 85.4%
+      x: 84.6%
       y: 28.725%
       width: 2.4%
       height: 1.05%
@@ -922,9 +922,9 @@ items:
         visible: false
   - type: mini-graph
     geometry:
-      x: 74.5%
+      x: 72.5%
       y: 30.8%
-      width: 13.3%
+      width: 14.5%
       height: 15.1%
     timeframe:
       hours: 24
@@ -995,9 +995,9 @@ items:
         decimal-align: baseline
       format-hint: 00.0°
     geometry:
-      x: 74.5%
+      x: 72.5%
       y: 30.8%
-      width: 13.3%
+      width: 14.5%
       height: 9.362%
     margins:
       left: 0
@@ -1011,9 +1011,9 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 89.2%
+      x: 88.4%
       y: 30.8%
-      width: 8.8%
+      width: 9.6%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1042,9 +1042,9 @@ items:
           bottom: 0
       format-hint: 00%
     geometry:
-      x: 89.2%
+      x: 88.4%
       y: 32.6%
-      width: 5.984%
+      width: 6.528%
       height: 4.2%
     margins:
       left: 0
@@ -1058,10 +1058,10 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 95.36%
-      y: 33.15%
-      width: 0.8%
-      height: 1.25%
+      x: 94.928%
+      y: 33.6%
+      width: 1.0%
+      height: 1.55%
     matchingGroup:
       group: global.hlmark
       matchAll: true
@@ -1089,10 +1089,10 @@ items:
           bottom: 0
       format-hint: 00%
     geometry:
-      x: 96.16%
+      x: 95.928%
       y: 32.6%
-      width: 1.84%
-      height: 2.0%
+      width: 2.072%
+      height: 2.6%
     margins:
       left: 0
       right: 0
@@ -1105,10 +1105,10 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 95.36%
-      y: 35.35%
-      width: 0.8%
-      height: 1.25%
+      x: 94.928%
+      y: 36.4%
+      width: 1.0%
+      height: 1.55%
     matchingGroup:
       group: global.hlmark
       matchAll: true
@@ -1136,10 +1136,10 @@ items:
           bottom: 0
       format-hint: 00%
     geometry:
-      x: 96.16%
-      y: 34.8%
-      width: 1.84%
-      height: 2.0%
+      x: 95.928%
+      y: 35.4%
+      width: 2.072%
+      height: 2.6%
     margins:
       left: 0
       right: 0
@@ -1152,9 +1152,9 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 89.2%
+      x: 88.4%
       y: 38.35%
-      width: 8.8%
+      width: 9.6%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1183,9 +1183,9 @@ items:
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 89.2%
+      x: 88.4%
       y: 40.15%
-      width: 5.984%
+      width: 6.528%
       height: 4.2%
     margins:
       left: 0
@@ -1199,10 +1199,10 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 95.36%
-      y: 40.7%
-      width: 0.8%
-      height: 1.25%
+      x: 94.928%
+      y: 41.15%
+      width: 1.0%
+      height: 1.55%
     matchingGroup:
       group: global.hlmark
       matchAll: true
@@ -1230,10 +1230,10 @@ items:
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 96.16%
+      x: 95.928%
       y: 40.15%
-      width: 1.84%
-      height: 2.0%
+      width: 2.072%
+      height: 2.6%
     margins:
       left: 0
       right: 0
@@ -1246,10 +1246,10 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 95.36%
-      y: 42.9%
-      width: 0.8%
-      height: 1.25%
+      x: 94.928%
+      y: 43.95%
+      width: 1.0%
+      height: 1.55%
     matchingGroup:
       group: global.hlmark
       matchAll: true
@@ -1277,10 +1277,10 @@ items:
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 96.16%
-      y: 42.35%
-      width: 1.84%
-      height: 2.0%
+      x: 95.928%
+      y: 42.95%
+      width: 2.072%
+      height: 2.6%
     margins:
       left: 0
       right: 0
@@ -1293,9 +1293,9 @@ items:
     color: $good
     alignment: BottomLeft
     geometry:
-      x: 74.5%
+      x: 72.5%
       y: 48.1%
-      width: 23.5%
+      width: 25.5%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1306,7 +1306,7 @@ items:
     key: indoor.battery.battery#terrarium
     title: false
     geometry:
-      x: 85.4%
+      x: 84.6%
       y: 48.325%
       width: 2.4%
       height: 1.05%
@@ -1332,9 +1332,9 @@ items:
         visible: false
   - type: mini-graph
     geometry:
-      x: 74.5%
+      x: 72.5%
       y: 50.4%
-      width: 13.3%
+      width: 14.5%
       height: 15.1%
     timeframe:
       hours: 24
@@ -1405,9 +1405,9 @@ items:
         decimal-align: baseline
       format-hint: 00.0°
     geometry:
-      x: 74.5%
+      x: 72.5%
       y: 50.4%
-      width: 13.3%
+      width: 14.5%
       height: 9.362%
     margins:
       left: 0
@@ -1421,9 +1421,9 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 89.2%
+      x: 88.4%
       y: 50.4%
-      width: 8.8%
+      width: 9.6%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1452,9 +1452,9 @@ items:
           bottom: 0
       format-hint: 00%
     geometry:
-      x: 89.2%
+      x: 88.4%
       y: 52.2%
-      width: 5.984%
+      width: 6.528%
       height: 4.2%
     margins:
       left: 0
@@ -1468,10 +1468,10 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 95.36%
-      y: 52.75%
-      width: 0.8%
-      height: 1.25%
+      x: 94.928%
+      y: 53.2%
+      width: 1.0%
+      height: 1.55%
     matchingGroup:
       group: global.hlmark
       matchAll: true
@@ -1499,10 +1499,10 @@ items:
           bottom: 0
       format-hint: 00%
     geometry:
-      x: 96.16%
+      x: 95.928%
       y: 52.2%
-      width: 1.84%
-      height: 2.0%
+      width: 2.072%
+      height: 2.6%
     margins:
       left: 0
       right: 0
@@ -1515,10 +1515,10 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 95.36%
-      y: 54.95%
-      width: 0.8%
-      height: 1.25%
+      x: 94.928%
+      y: 56.0%
+      width: 1.0%
+      height: 1.55%
     matchingGroup:
       group: global.hlmark
       matchAll: true
@@ -1546,10 +1546,10 @@ items:
           bottom: 0
       format-hint: 00%
     geometry:
-      x: 96.16%
-      y: 54.4%
-      width: 1.84%
-      height: 2.0%
+      x: 95.928%
+      y: 55.0%
+      width: 2.072%
+      height: 2.6%
     margins:
       left: 0
       right: 0
@@ -1562,9 +1562,9 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 89.2%
+      x: 88.4%
       y: 57.95%
-      width: 8.8%
+      width: 9.6%
       height: 1.5%
     matchingGroup:
       group: global.cap
@@ -1593,9 +1593,9 @@ items:
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 89.2%
+      x: 88.4%
       y: 59.75%
-      width: 5.984%
+      width: 6.528%
       height: 4.2%
     margins:
       left: 0
@@ -1609,10 +1609,10 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 95.36%
-      y: 60.3%
-      width: 0.8%
-      height: 1.25%
+      x: 94.928%
+      y: 60.75%
+      width: 1.0%
+      height: 1.55%
     matchingGroup:
       group: global.hlmark
       matchAll: true
@@ -1640,10 +1640,10 @@ items:
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 96.16%
+      x: 95.928%
       y: 59.75%
-      width: 1.84%
-      height: 2.0%
+      width: 2.072%
+      height: 2.6%
     margins:
       left: 0
       right: 0
@@ -1656,10 +1656,10 @@ items:
     color: $faint
     alignment: BottomLeft
     geometry:
-      x: 95.36%
-      y: 62.5%
-      width: 0.8%
-      height: 1.25%
+      x: 94.928%
+      y: 63.55%
+      width: 1.0%
+      height: 1.55%
     matchingGroup:
       group: global.hlmark
       matchAll: true
@@ -1687,10 +1687,10 @@ items:
           bottom: 0
       format-hint: 00°
     geometry:
-      x: 96.16%
-      y: 61.95%
-      width: 1.84%
-      height: 2.0%
+      x: 95.928%
+      y: 62.55%
+      width: 2.072%
+      height: 2.6%
     margins:
       left: 0
       right: 0

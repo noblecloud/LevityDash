@@ -123,6 +123,9 @@ class OpenWeatherMap(REST, realtime=True, daily=False, hourly=False, logged=Fals
 	urls: OWMURLs = OWMURLs()
 	schema = schema
 	name = 'OpenWeatherMap'
+	# Last resort: its free tier proved the least accurate of the weather sources, so any
+	# other source of the same key wins unless the user sets `defaultFor` or `priority`.
+	sourcePriority = -10
 	refreshPeriod = timedelta(minutes=15)
 
 	__defaultConfig__ = _defaultConfig

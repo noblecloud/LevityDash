@@ -16,6 +16,30 @@ defaultFor = indoor
 defaultFor = indoor.temperature
 ```
 
+### Which source wins
+
+When several plugins publish the same key, a display shows the first of these that applies:
+
+1. A plugin whose `defaultFor` names part of the key (the highest `priority` among them).
+2. The plugin with the highest `priority`, counting only sources that are still reporting.
+3. A source that has gone quiet (see `maxAge`), only if nothing else has the key.
+
+`priority` is a number; higher wins, and the number of `defaultFor` entries only breaks ties. Built-in values: WeatherFlow 20 (your own station), PirateWeather and OpenMeteo 10, anything else 0, OpenWeatherMap -10 (last resort; its free tier was the least accurate). Set your own in the plugin's section:
+
+```ini
+[plugin]
+priority = 15
+```
+
+`maxAge` is how many minutes a live reading may go without an update before the plugin stops being preferred for that key; `0` turns it off. WeatherFlow defaults to 30, so when a station's sensor dies (only the base still reports pressure, say) the other keys come from PirateWeather or OpenMeteo while the pressure stays the station's. A reading from a source with no `maxAge` is never treated as old.
+
+```ini
+[plugin]
+maxAge = 15
+```
+
+A single item can still pin a source with `Source:key`, for example `OpenMeteo:environment.temperature.temperature`.
+
 ## Individual Plugin Config <!-- {docsify-ignore} -->
 Each plugin can have its own config file of the same name or a `config.ini` file within a folder of the same name
 

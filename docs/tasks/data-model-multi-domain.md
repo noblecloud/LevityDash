@@ -75,7 +75,7 @@ Google Fit and InfluxDB:
 > per-instance is a label.**
 
 Units stay out of the name (OTel-style metadata). Prometheus bakes units into
-names only because PromQL has no unit type; LevityDash has WeatherUnits, so it
+names only because PromQL has no unit type; LevityDash has UnitCorn, so it
 belongs in OTel's camp — no `_celsius` suffixes.
 
 ## Correction: the primitive is not `Device`

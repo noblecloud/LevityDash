@@ -1774,6 +1774,12 @@ class Plot(GlowMixin, QGraphicsPixmapItem, Stateful):
 		if (glow := self.glow) is not None:
 			# room for the halo on both sides of the line
 			weight += 2 * glow.reach_px(weight)
+		if self._pins:
+			# A glyph is set on the line or row at its centre and reaches past it by about its own size (a weather
+			# icon's rays, an arrow's head), beyond the figure when the row is thin: room on every side, or the
+			# picture cuts it off.
+			size = pinSizePx({**PIN_DEFAULTS, **self._pins}, getDPI(self.scene().view.screen()))
+			weight = max(weight, size * 1.4)
 		weight = int(weight) + 1
 		weight *= self.scene().view.devicePixelRatio()
 		return QSize(weight, weight)
@@ -1971,7 +1977,7 @@ class LinePlot(Plot):
 		`size` is pixels (or `5mm`); `offset` is in sizes, negative above the line; `spacing` is the least
 		gap between marks in sizes. An icon value draws as its glyph. Other values need `steps`
 		(`[[0, wi:day-sunny], [0.05, wi:showers], [0.3, wi:rain]]`: a number takes the last row it reaches)
-		or `map` (`{0: 'wi:day-sunny'}`: exact values); with neither, the value prints as text.
+		or `map` (`{0: 'wi:day-sunny'}`: exact values; a value it leaves out gets no mark); with neither, the value prints as text.
 		`at` (0 bottom to 1 top of the figure) sets every mark at that height instead of on the line,
 		which makes a row of glyphs: a condition timeline. A `strip` plot draws only that row.
 		`only: peaks | troughs | extremes` puts pins only where the line turns (a turn must stand out by
@@ -2107,7 +2113,7 @@ class LinePlot(Plot):
 			config = {**PIN_DEFAULTS, **({'at': self._rowAt} if self._rowAt is not None else {}), **self._pins}
 			rowY = None
 			if config.get('at') is not None:
-				rowY = self.figure.figureTransform.map(QPointF(0, config['at'])).y()
+				rowY = self.figure.figureTransform.map(QPointF(0, config['at'])).y() + self.img_padding.height() / 2  # the path is already inside the padding
 			extras['pins'] = pinPath(times, xs[1:count - tail], ys[1:count - tail], *side, config, getDPI(screen), rowY)
 			color = self._pins.get('color')
 			# A row has no line to borrow its colour from: the text colour, unless the pins say.
@@ -2329,8 +2335,12 @@ def pinText(value: Any, config: Mapping) -> tuple[str, Optional[QFont]]:
 
 	if isinstance(value, Icon):
 		return value.unicode, QFont(value.font)
-	if str(value) in config['map']:
-		return resolve(config['map'][str(value)])
+	# A comparison gives True or False; `true` is how YAML 1.2 keys it.
+	names = (str(value), str(value).lower()) if isinstance(value, (bool, np.bool_)) else (str(value),)
+	if (name := next((n for n in names if n in config['map']), None)) is not None:
+		return resolve(config['map'][name])
+	if config['map'] and not config['steps']:
+		return '', None  # a value the map does not name has no mark
 	if config['steps']:
 		try:
 			number = float(value)
@@ -2341,10 +2351,17 @@ def pinText(value: Any, config: Mapping) -> tuple[str, Optional[QFont]]:
 	return resolve(str(value))
 
 
+def pinSizePx(config: Mapping, dpi: float) -> float:
+	"""A pins mapping's `size` in pixels: a number is pixels, `4mm`/`0.5cm` are physical."""
+	size = config['size']
+	if isinstance(size, (int, float)):
+		return float(size)
+	return float(re.sub(r'[a-z]+$', '', str(size))) * dpi / (25.4 if str(size).endswith('mm') else 2.54 if str(size).endswith('cm') else 1)
+
+
 def pinPath(times: np.ndarray, xs: np.ndarray, ys: np.ndarray, pinTimes: np.ndarray, pinValues: list, config: Mapping, dpi: float, rowY: Optional[float] = None) -> QPainterPath:
 	"""The glyphs for a pinned series, set on the line through (xs, ys) at each pin's own time, or all at `rowY` (a row)."""
-	size = config['size']
-	size = float(size) if isinstance(size, (int, float)) else float(re.sub(r'[a-z]+$', '', str(size))) * dpi / (25.4 if str(size).endswith('mm') else 2.54 if str(size).endswith('cm') else 1)
+	size = pinSizePx(config, dpi)
 	path = QPainterPath()
 	lastX = -np.inf
 	candidates = [(t, value, -1) for t, value in zip(pinTimes, pinValues)]

@@ -35,7 +35,7 @@ Inch(0.01)    -> '0.01 in/hr'   precision 2
 
 ---
 
-## 1. `max` is not enforced below 1 (WeatherUnits) — bug
+## 1. `max` is not enforced below 1 (UnitCorn) — bug
 
 `_SmartFloat.py:870` gates the entire `max` clamping block behind
 `if float(value) > 1:`. Sub-1 values never have precision recomputed or
@@ -48,12 +48,12 @@ Inch(1.25)   ->  '1.2'   at max=1                     # correctly clamped
 
 ### ✅ DONE 2026-07-25 — items 1 and 2 shipped together
 
-WeatherUnits `59bb0cf` (enforcement + `leadingZero`) and `5a5a4c1` (the
+UnitCorn `59bb0cf` (enforcement + `leadingZero`) and `5a5a4c1` (the
 adaptive `auto` rule), LevityDash `acada93` (config). `max` now applies
 below 1, and `leadingZero` is three-state with an `auto` default.
 
 **The `auto` rule is subtler than it looks** and two plausible
-simplifications of it are both wrong — see `WeatherUnits/docs/formatting.md`
+simplifications of it are both wrong — see `unitcorn/docs/formatting.md`
 § *leadingZero and the borrowed digit*, which documents both rejected
 versions. Named regression tests guard each.
 
@@ -112,11 +112,11 @@ app. Guard with the before/after behavior matrix (8 unit types × ~33 specs,
 the harness used for the `:`-separator and `type=f` fixes) and a live
 dashboard render diff. Note the LevityDash suite is the one that catches
 config-dependent breakage — `tests/wire/test_codec.py`'s precipitation
-assertion failed only under the app's config, not WeatherUnits' own.
+assertion failed only under the app's config, not UnitCorn's own.
 
 </details>
 
-## 2. `leadingZero` (WeatherUnits) — already written, commented out
+## 2. `leadingZero` (UnitCorn) — already written, commented out
 
 `_SmartFloat.py:927` still carries the implementation:
 
@@ -147,7 +147,7 @@ information for a sub-1 value, but it is a legibility convention, and
 whether to drop it depends on viewing distance — a wall display and a dense
 panel want different answers. That is a taste call the engine cannot make.
 
-## 3. Value annotations (LevityDash, and partly WeatherUnits) — new
+## 3. Value annotations (LevityDash, and partly UnitCorn) — new
 
 A channel for "display this alongside the value to make it clearer, **if you
 can**" — presentational metadata the renderer may surface or drop depending
@@ -255,18 +255,18 @@ exactness-honesty paid out of the typography budget:
 
 - Before/after behavior matrix around items 1 and 2 (both change rendered
   output library-wide).
-- `pytest ../WeatherUnits/tests` and `poetry run pytest` in LevityDash —
-  LevityDash renders every dashboard value through WeatherUnits, so it is
+- `pytest ../unitcorn/tests` and `poetry run pytest` in LevityDash —
+  LevityDash renders every dashboard value through UnitCorn, so it is
   the real integration check.
 - Live render diff of the dashboard (offscreen `.grab()` harness, see
   CLAUDE.md) — confirm the precipitation panel stops overlapping and that
   no other panel's width shifts unexpectedly.
-- Extend `WeatherUnits/tests/test_formatting.py`, which already pins the
+- Extend `unitcorn/tests/test_formatting.py`, which already pins the
   `30.0 -> '30'` gap and the precision/max table this work changes.
 
 ## Related
 
-- `WeatherUnits/docs/formatting.md` — the parse pipeline, parameter table,
+- `unitcorn/docs/formatting.md` — the parse pipeline, parameter table,
   and the four declared-but-unimplemented display options (`trailingZero`,
   `leadingZero`, `forcePrecision`, `sizeHint`). `sizeHint` ("override
   generated size hint string... when you know the expected max string

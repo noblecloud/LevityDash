@@ -23,7 +23,7 @@ brief's verification steps.
 |---|---|
 | [dual-license-migration](dual-license-migration.md) | the licensing model itself; repo is still plain MIT |
 | [value-annotations-and-digit-budget](value-annotations-and-digit-budget.md) § 3 | whether annotations v1 is derived-only, and the shape of the "micro leading zero" rendering. The digit budget itself has merged. |
-| *(WeatherUnits)* [`parameter-audit.md`](../../../WeatherUnits/docs/parameter-audit.md) | param renames (`max` → ?, `unit_type` → `unitType`), which dead options to delete, and the library name |
+| *(UnitCorn)* [`parameter-audit.md`](../../../unitcorn/docs/parameter-audit.md) | param renames (`max` → ?, `unit_type` → `unitType`), which dead options to delete, and the library name |
 | [roadmap open questions](../roadmap.md#plan-first-stable-cut-then-lanes) | who the first stable cut is for, and the lane order after it |
 
 ## Open — actionable
@@ -69,6 +69,7 @@ brief's verification steps.
 
 | brief | where it landed |
 |---|---|
+| [band-step-card-missing](band-step-card-missing.md) | `fix/band-step-card-appears-late` (off `dev` at `9132f1cb`), 2026-11-25: a step band's picture of a card parked outside the scene rectangle came out blank, so the card was missing for the whole move and popped in at the end. |
 | [studio-snapping-guides](studio-snapping-guides.md) | gearing #87, ratio snapping and distance guides #89, wireframe and guideline layers #90 (all on `dev`). |
 | Board saves (`shared:` defaults, reload fidelity) | #71, merged 2026-10-14. A saved board reloads with its values. |
 | Socket silence and BLE unavailable | #59 (silent sockets rebind or reconnect), #61 (Bluetooth-unavailable retry), merged 2026-10-14. |
@@ -107,12 +108,12 @@ brief's verification steps.
 - **`environment.precipitation.probability` has no source.** OpenMeteo
   doesn't provide the key; only PirateWeather does, and nothing is
   connected — that figure renders empty.
-- **WeatherUnits `SyntaxWarning`s** — `\s` in non-raw regex strings
+- **UnitCorn `SyntaxWarning`s** — `\s` in non-raw regex strings
   (`_SmartFloat.py:67,81`). Pre-existing; Python says these "will not work
   in the future."
 - **`Angle` / `Direction` render a trailing space** (`'45° '`, `'S '`) from
   an empty unit plus a spacer. Cosmetic.
-- **Public docs for WeatherUnits** — the original ask, deliberately blocked
+- **Public docs for UnitCorn** — the original ask, deliberately blocked
   on the naming cleanup so they aren't written against a surface that needs
   apologising for.
 - **Govee's schema golden tests** — the BLE payload parser has no golden

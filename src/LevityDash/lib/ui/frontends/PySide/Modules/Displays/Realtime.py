@@ -1574,7 +1574,7 @@ class MeasurementDisplayProperties(Stateful):
 				formatString = f'format:{formatString}'
 			return value.__format__(formatString)
 		elif value is None:
-			return "⋯"
+			return "–"
 		return str(value)
 
 	_unitRefreshTimer: QTimer | None = None
